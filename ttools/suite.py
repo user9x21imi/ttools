@@ -88,7 +88,7 @@ def install_component(app,release,defer_system=False):
             py=create_venv(dest/'venv')
             install_pip(py,'psutil>=7.0','tzdata>=2025.2')
         entry=source_entry(dest/'entry.py','tthings',source)
-        atomic_json(dest/'.tthings/install.json',{'app_id':'tthings','version':json.loads((release/'components/versions.json').read_text())['tthings']})
+        atomic_json(dest/'.tthings/install.json',{'app_id':'tthings','version':json.loads((release/'components/versions.json').read_text(encoding='utf-8'))['tthings']})
         env['TTOOLS_TTHINGS_PREFIX']=str(dest)
         command=[str(py),str(entry)]
         run([*command,'--version'])
@@ -218,7 +218,7 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             return old
         if old and 'tvpn' in proposed['install']:
             installed_vpn=Path(old['release'])/'apps/tvpn/VERSION'
-            if installed_vpn.is_file() and version_key(installed_vpn.read_text().strip())>version_key(proposed['versions']['tvpn']):
+            if installed_vpn.is_file() and version_key(installed_vpn.read_text(encoding='utf-8').strip())>version_key(proposed['versions']['tvpn']):
                 raise RuntimeError('This suite contains an older TVPN than the installed native update; refusing to downgrade the protected backend')
         stop_previous_background_apps(old)
         release=prefix/'releases'/build_id

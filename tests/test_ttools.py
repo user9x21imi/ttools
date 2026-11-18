@@ -23,7 +23,7 @@ class CatalogTests(unittest.TestCase):
             path = Path(folder)/'apps.local.json'
             path.write_text(json.dumps({'apps':[{'id':'test','command':['./bin/client','a b','$(false)']}]}))
             app = core.read_catalog(path)[0]
-            self.assertEqual(app['command'],[str(Path(folder)/'bin/client'),'a b','$(false)'])
+            self.assertEqual(app['command'],[str((Path(folder)/'bin/client').resolve()),'a b','$(false)'])
 
     def test_reimport_refresh_and_merge_by_id(self):
         with tempfile.TemporaryDirectory() as folder, patch.object(core,'CONFIG',Path(folder)/'config'):

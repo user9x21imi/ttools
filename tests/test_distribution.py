@@ -43,7 +43,10 @@ class DistributionTests(unittest.TestCase):
             root=Path(tmp)
             for name in ('../outside','/absolute','C:/Windows/file','folder\\bad'):
                 archive=root/'unsafe.zip'
-                with zipfile.ZipFile(archive,'w') as package:package.writestr(name,b'no')
+                with zipfile.ZipFile(archive,'w') as package:
+                    member=zipfile.ZipInfo(name)
+                    member.filename=member.orig_filename=name
+                    package.writestr(member,b'no')
                 with self.assertRaises(ValueError):d.extract_zip(archive,root/'out')
             with zipfile.ZipFile(root/'link.zip','w') as package:
                 info=zipfile.ZipInfo('link');info.external_attr=(stat.S_IFLNK|0o777)<<16
@@ -87,7 +90,7 @@ class DistributionTests(unittest.TestCase):
             with patch.object(suite,'linux_prerequisites'),patch.object(suite,'create_venv',return_value=Path('/test/python')),patch.object(suite,'install_pip'),patch.object(suite,'install_component',side_effect=RuntimeError('broken package')):
                 with self.assertRaisesRegex(RuntimeError,'broken package'):
                     suite.install(bundle,prefix,selected=['tthings'],shortcuts=False)
-            self.assertEqual(json.loads((prefix/'state.json').read_text()),old)
+            self.assertEqual(json.loads((prefix/'state.json').read_text(encoding='utf-8')),old)
             self.assertEqual(list((prefix/'releases').iterdir()),[])
             with d.locked(prefix):pass
 
@@ -102,7 +105,7 @@ class DistributionTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError,'refusing to downgrade'):
                     suite.install(bundle,prefix,selected=['tvpn'],shortcuts=False)
                 stop.assert_not_called()
-            self.assertEqual(json.loads((prefix/'state.json').read_text()),old)
+            self.assertEqual(json.loads((prefix/'state.json').read_text(encoding='utf-8')),old)
 
     @unittest.skipIf(os.name=='nt','The fixture deliberately bypasses launcher dependency installation')
     def test_success_repeat_install_and_rollback(self):
@@ -115,7 +118,7 @@ class DistributionTests(unittest.TestCase):
                 self.assertEqual(install.call_count,1)
                 suite.install(second,prefix,selected=['tthings'],shortcuts=False)
                 suite.rollback(prefix)
-                self.assertEqual(json.loads((prefix/'state.json').read_text())['release'],state['release'])
+                self.assertEqual(json.loads((prefix/'state.json').read_text(encoding='utf-8'))['release'],state['release'])
 
     def test_bad_download_hash_does_not_invoke_new_installer(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,7 +129,7 @@ class DistributionTests(unittest.TestCase):
             with patch.object(suite,'release_manifest',return_value=remote),patch.object(suite,'fetch',side_effect=fake_fetch),patch.object(suite,'run') as installer:
                 with self.assertRaisesRegex(ValueError,'SHA-256'):suite.update(prefix)
                 installer.assert_not_called()
-            self.assertEqual(json.loads((prefix/'state.json').read_text())['version'],'1.0.0')
+            self.assertEqual(json.loads((prefix/'state.json').read_text(encoding='utf-8'))['version'],'1.0.0')
 
 
     @unittest.skipIf(os.name=='nt','Native installer integration runs on POSIX; Windows launcher dependency is covered by CI')
@@ -155,9 +158,9 @@ class DistributionTests(unittest.TestCase):
             def fetch_local(url,target,*args):shutil.copy2(archive,target)
             with patch.object(suite,'release_manifest',return_value=remote),patch.object(suite,'fetch',side_effect=fetch_local):
                 self.assertTrue(suite.update(prefix,force=True))
-            state=json.loads((prefix/'state.json').read_text())
+            state=json.loads((prefix/'state.json').read_text(encoding='utf-8'))
             self.assertEqual(state['version'],'2.0.0')
-            catalog=json.loads((Path(state['release'])/'apps.local.json').read_text())
+            catalog=json.loads((Path(state['release'])/'apps.local.json').read_text(encoding='utf-8'))
             self.assertEqual(subprocess.check_output(catalog['apps'][0]['command'],text=True).strip(),'2.0.0')
             self.assertEqual(state['previous']['version'],'1.0.0')
 
@@ -178,7 +181,7 @@ class ProcessCleanupTests(unittest.TestCase):
                 self.assertTrue(ready.exists())
                 parent.send_signal(signal.SIGTERM)
                 self.assertEqual(parent.wait(timeout=3),143)
-                self.assertEqual(clean.read_text(),'clean')
+                self.assertEqual(clean.read_text(encoding='utf-8'),'clean')
             finally:
                 if parent.poll() is None:
                     parent.terminate();parent.wait(timeout=3)

@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import stat
@@ -113,13 +113,13 @@ def extract_zip(archive,directory):
         if len(entries)>50000 or sum(x.file_size for x in entries)>2*1024**3:
             raise ValueError('Archive extraction limits exceeded')
         for item in entries:
-            name=item.filename
-            path=Path(name)
+            name=item.orig_filename
+            path=PurePosixPath(name)
             mode=item.external_attr>>16
-            if (not name or '\\' in name or ':' in name or path.is_absolute() or '..' in path.parts
+            if (not name or '\0' in name or '\\' in name or ':' in name or name.startswith('/') or path.is_absolute() or '..' in path.parts
                 or stat.S_IFMT(mode) not in (0,stat.S_IFREG,stat.S_IFDIR)):
                 raise ValueError(f'Unsafe archive member: {name}')
-            dest=directory/path
+            dest=directory.joinpath(*path.parts)
             if not dest.resolve().is_relative_to(directory):
                 raise ValueError('Archive escapes extraction directory')
             if item.is_dir():

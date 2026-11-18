@@ -12,7 +12,7 @@ def read_catalog(path):
     path = Path(path).expanduser().resolve()
     if path.is_dir():
         path = path/'apps.local.json'
-    data = json.loads(path.read_text())
+    data = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(data, dict) or not isinstance(data.get('apps'), list):
         raise ValueError('Ожидается объект с массивом apps')
     apps = []
@@ -33,7 +33,7 @@ def read_catalog(path):
 
 def sources():
     path = CONFIG/'sources.json'
-    return json.loads(path.read_text()) if path.exists() else []
+    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else []
 
 def add_source(path):
     path = Path(path).expanduser().resolve()
@@ -45,7 +45,7 @@ def add_source(path):
         values.append(str(path))
     CONFIG.mkdir(parents=True, exist_ok=True)
     temp = CONFIG/'sources.tmp'
-    temp.write_text(json.dumps(values, ensure_ascii=False, indent=2))
+    temp.write_text(json.dumps(values, ensure_ascii=False, indent=2),encoding='utf-8')
     temp.replace(CONFIG/'sources.json')
 
 def load_apps():

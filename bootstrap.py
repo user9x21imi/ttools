@@ -4,7 +4,7 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import shutil
 import stat
@@ -98,8 +98,8 @@ def main():
             members=package.infolist()
             if len(members)>50000 or sum(x.file_size for x in members)>2*1024**3:raise ValueError('Archive too large')
             for item in members:
-                path=Path(item.filename);kind=stat.S_IFMT(item.external_attr>>16)
-                if path.is_absolute() or '..' in path.parts or ':' in item.filename or '\\' in item.filename or kind not in (0,stat.S_IFREG,stat.S_IFDIR):raise ValueError('Unsafe archive member')
+                name=item.orig_filename;path=PurePosixPath(name);kind=stat.S_IFMT(item.external_attr>>16)
+                if not name or '\0' in name or name.startswith('/') or path.is_absolute() or '..' in path.parts or ':' in name or '\\' in name or kind not in (0,stat.S_IFREG,stat.S_IFDIR):raise ValueError('Unsafe archive member')
             package.extractall(folder/'unpacked')
         bundle=folder/'unpacked/ttools'
         sys.path.insert(0,str(bundle))
