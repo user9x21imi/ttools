@@ -31,7 +31,7 @@ def build(output,platforms=PLATFORMS,handoff=None):
             root=Path(temporary)/'ttools';root.mkdir()
             for directory in ('ttools','components','konsole','scripts'):
                 copy_tree(ROOT/directory,root/directory)
-            for name in ('installer.py','bootstrap.py','install-local.py','README.md','LICENSE','THIRD_PARTY.md','icon.svg','logo.svg'):
+            for name in ('installer.py','bootstrap.py','install-local.py','README.md','README.en.md','LICENSE','THIRD_PARTY.md','icon.svg','logo.svg'):
                 shutil.copy2(ROOT/name,root/name)
             copy_tree(ROOT/'docs',root/'docs')
             launcher='Install-ttools.sh' if target_platform.startswith('linux') else 'Install-ttools.command' if target_platform.startswith('macos') else 'Install-ttools.cmd'
