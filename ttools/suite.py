@@ -15,6 +15,7 @@ import venv
 from .distribution import (REPOSITORY, atomic_json, digest, extract_zip, fetch, locked,
                            platform_id, prefix_path, read_remote_json, verify_bundle, version_key, configure_text_io)
 
+NATIVE_TRAMPOLINE = "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')"
 APP_IDS = ('tspotify','ttelegram','tthings','tvpn')
 
 def run(argv, **kwargs):
@@ -36,10 +37,12 @@ def plan(bundle, target_platform, selected, allow_partial=False):
     unsupported=[]
     for app in selected:
         if app not in APP_IDS:raise ValueError(f'Unknown component: {app}')
-        if app=='ttelegram' and target_platform!='linux-x86_64':unsupported.append(app)
+        if app=='ttelegram' and target_platform!='linux-x86_64' and not (target_platform=='windows-x86_64' and (bundle/'components/ttelegram/windows-native/app.json').is_file()):unsupported.append(app)
         if app=='tvpn' and target_platform not in ('linux-x86_64','macos-arm64','macos-x86_64','windows-x86_64'):unsupported.append(app)
     if unsupported and not allow_partial:
         raise RuntimeError(f'{target_platform}: no supported package for {", ".join(unsupported)}. Полный комплект для этой ОС пока недоступен; --allow-partial разрешает явно неполную установку.')
+    if target_platform=='windows-x86_64' and 'ttelegram' not in unsupported and 'ttelegram' in selected:
+        versions['ttelegram']=json.loads((bundle/'components/ttelegram/windows-native/app.json').read_text())['version']
     return {'platform':target_platform,'install':[a for a in APP_IDS if a in selected and a not in unsupported],
             'unsupported':unsupported,'versions':versions,'complete':not unsupported and set(selected)==set(APP_IDS)}
 
@@ -80,6 +83,10 @@ def install_component(app,release,defer_system=False):
             run([*command,'verify-runtime'])
         return command,env
     if app=='ttelegram':
+        if os.name=='nt':
+            native=bundle/'runtime/windows-native'
+            run([native/'bootstrap/python.exe','-c',NATIVE_TRAMPOLINE,native/'manage.py','install','--prefix',dest,'--stop'])
+            return [str(dest/'bootstrap/python.exe'),'-c',NATIVE_TRAMPOLINE,str(dest/'manage.py'),'launch','--prefix',str(dest),'--in-terminal'],env
         run([sys.executable,bundle/'install.py','--prefix',dest])
         return [str(dest/'bin/ttelegram')],env
     if app=='tthings':
@@ -176,7 +183,10 @@ def stop_previous_background_apps(state):
         if not dest.is_dir():continue
         env=dict(os.environ,**app.get('env',{}))
         if app['id']=='ttelegram':
-            run([sys.executable,dest/'manage.py','--prefix',dest,'--stop-only'],env=env)
+            if os.name=='nt':
+                run([dest/'bootstrap/python.exe','-c',NATIVE_TRAMPOLINE,dest/'manage.py','stop','--prefix',dest],env=env)
+            else:
+                run([sys.executable,dest/'manage.py','--prefix',dest,'--stop-only'],env=env)
         elif app['id']=='tspotify':
             run([*app['command'],'stop','--timeout','15'],env=env)
             # Demo has no control endpoint; its managed runtime lock still excludes updates.

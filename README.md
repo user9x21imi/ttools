@@ -11,11 +11,7 @@
 терминальном клиенте. Быстрый выбор с клавиатуры, собственный цвет каждого
 приложения, анимированная заставка и тихий фон из настоящих эффектов tthings.
 
-> **Статус поставки: preview.** Полный комплект подготовлен для Linux x86_64.
-> Для macOS и Windows подготовлены отдельные установщики неполного комплекта:
-> ttools + Spotify + TVPN + tthings. Telegram пока передан автором только для
-> Linux/CPython 3.14. Нативная полная установка на Windows/macOS этим релизом
-> не заявляется. Результаты локальных проверок — в [VALIDATION.md](docs/VALIDATION.md).
+> **Предварительная версия.** Linux x86_64 включает все четыре приложения. Windows x64 теперь включает нативный Telegram без WSL; его интерфейс ещё требует ручной проверки на Windows. На macOS Telegram пока недоступен.
 
 <p align="center"><b>Музыка. Сообщения. Сеть. Живой экран.</b><br>
 Один вход в ваши терминальные приложения — с клавиатуры, без поисков по папкам.</p>
@@ -38,10 +34,10 @@ curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh 
 curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | sh -s -- --preview --allow-partial
 ```
 
-**Windows x86_64 · PowerShell — пока без Telegram:**
+**Windows x86_64 · PowerShell — нативный Telegram preview:**
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/user9x21imi/ttools/main/install.ps1))) -Preview -AllowPartial
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/user9x21imi/ttools/main/install.ps1))) -Preview
 ```
 
 Перед первой установкой закройте прежние окна этих приложений; сохранённый вход останется на месте.
@@ -59,10 +55,10 @@ curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh 
 
 | Скачать ZIP после публикации релиза | Запустить после распаковки |
 |---|---|
-| [INSTALL LINUX · весь комплект](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.1/ttools-linux-x86_64.zip) | `Install-ttools.sh` |
-| [INSTALL macOS ARM · без Telegram](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.1/ttools-macos-arm64.zip) | `Install-ttools.command` |
-| [INSTALL macOS Intel · без Telegram](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.1/ttools-macos-x86_64.zip) | `Install-ttools.command` |
-| [INSTALL WINDOWS · без Telegram](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.1/ttools-windows-x86_64.zip) | `Install-ttools.cmd` |
+| [INSTALL LINUX · весь комплект](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.2/ttools-linux-x86_64.zip) | `Install-ttools.sh` |
+| [INSTALL macOS ARM · без Telegram](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.2/ttools-macos-arm64.zip) | `Install-ttools.command` |
+| [INSTALL macOS Intel · без Telegram](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.2/ttools-macos-x86_64.zip) | `Install-ttools.command` |
+| [INSTALL WINDOWS · Telegram preview](https://github.com/user9x21imi/ttools/releases/download/v1.1.0-preview.2/ttools-windows-x86_64.zip) | `Install-ttools.cmd` |
 
 Для локальных архивов содержимое и запускаемые файлы те же. Если macOS
 блокирует загруженный `.command`, разрешите запуск штатными средствами системы.
@@ -81,7 +77,7 @@ Windows `.cmd` использует установленный Python Launcher (
 | Приложение | Цвет выбора | Возможности |
 |---|---|---|
 | **tspotify** | 🟢 зелёный | Spotify, поиск и библиотека, браузерный/QR-вход, точечные обложки, спектр, локальное управление встроенным движком |
-| **ttelegram** | 🔵 синий | QR/2FA, чаты, сообщения, фото, стикеры/GIF, голосовые, мышь и сохраняемые черновики; пока Linux |
+| **ttelegram** | 🔵 синий | QR/2FA, чаты, сообщения, фото, стикеры/GIF, голосовые, мышь и сохраняемые черновики; Linux и Windows preview |
 | **TVPN** | 🟣 фиолетовый | Riseup VPN, регионы, ASCII-глобус, показатели трафика, штатное восстановление сети при выходе |
 | **tthings** | 🌺 фуксия | 130 эффектов, 11 системных инструментов, календарь и мониторинг, оконные эффекты; внешние проекты устанавливаются отдельно |
 
@@ -134,7 +130,7 @@ Ctrl+O  Настройки                       Ctrl+Q  Сохранить и �
 
 GIF записан с настоящего интерфейса на изолированном fake-backend. Имена,
 переписка и изображение вымышлены; Telegram-вход и сетевые запросы не выполнялись.
-В текущем комплекте Telegram устанавливается только на Linux.
+Telegram доступен на Linux и в предварительной нативной сборке Windows x64. macOS пока не поддерживается.
 
 ## TVPN · видеть, что происходит с соединением
 

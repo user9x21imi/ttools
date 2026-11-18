@@ -78,8 +78,8 @@ def main():
     target=target_platform()
     selected=args.components.split(',')
     # Reject unsupported complete installations before downloading/installing anything.
-    if target!='linux-x86_64' and 'ttelegram' in selected and not args.allow_partial:
-        p.error('Telegram is currently packaged for Linux x86_64 only. A complete native suite is not available for this OS. --allow-partial installs the supported applications explicitly.')
+    if target not in ('linux-x86_64','windows-x86_64') and 'ttelegram' in selected and not args.allow_partial:
+        p.error('Telegram is packaged for Linux x86_64 and preview Windows x64. A complete native suite is not available for this OS. --allow-partial installs the supported applications explicitly.')
     if args.prefix:prefix=Path(args.prefix).expanduser().resolve()
     elif os.name=='nt':prefix=Path(os.environ['LOCALAPPDATA'])/'ttools'
     elif platform.system()=='Darwin':prefix=Path.home()/'Library/Application Support/ttools'
@@ -119,7 +119,7 @@ def main():
         if args.preview:
             (prefix/'channel').write_text('preview',encoding='utf-8')
     print('Installed. Open a new terminal and run: ttools')
-    if args.allow_partial:print('Partial installation: Telegram is not included on this OS.')
+    if args.allow_partial and target.startswith('macos'):print('Partial installation: Telegram is not included on macOS.')
     return 0
 
 if __name__=='__main__':

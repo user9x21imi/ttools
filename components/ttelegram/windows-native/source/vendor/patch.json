@@ -1,0 +1,6 @@
+{
+  "tg_version": "0.26.0",
+  "target": "tg/views.py",
+  "original_sha256": "bf99bd69eaa58bc1c8329ab0d4a2ffdb6a88831ec800e79e9ab125d0353fdb28",
+  "patched_sha256": "987854fc813bdf3405c775c205ef920b6a0e0775475fca0d672cbe5639be9b04"
+}

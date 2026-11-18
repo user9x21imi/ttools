@@ -1,0 +1,24 @@
+Build host: Linux x86_64, Python 3.14.6. Not a Windows host certification.
+
+test_silence_tone_playback_toggle_and_draft (test_audio.Audio.test_silence_tone_playback_toggle_and_draft) ... ok
+test_dirty_refresh_does_not_erase_images (test_core.Core.test_dirty_refresh_does_not_erase_images) ... ok
+test_mouse_and_key_sequences (test_core.Core.test_mouse_and_key_sequences) ... ok
+test_pointer_rollback_paths (test_core.Core.test_pointer_rollback_paths) ... ok
+test_verify_detects_tampering (test_core.Core.test_verify_detects_tampering) ... ok
+test_wheel_traversal (test_core.Core.test_wheel_traversal) ... ok
+test_windows_payload_extracts (test_core.Core.test_windows_payload_extracts) ... ok
+test_install_reinstall_update_rollback_and_failure (test_install_simulation.Install.test_install_reinstall_update_rollback_and_failure) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 4.158s
+
+OK
+{"installed": "test-v1", "prefix": "/tmp/Telegram \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 wvmi9ra8/\u041b\u0430\u0443\u043d\u0447\u0435\u0440 \u0441 \u043f\u0440\u043e\u0431\u0435\u043b\u0430\u043c\u0438/Telegram", "started": false}
+{"installed": "test-v1", "prefix": "/tmp/Telegram \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 wvmi9ra8/\u041b\u0430\u0443\u043d\u0447\u0435\u0440 \u0441 \u043f\u0440\u043e\u0431\u0435\u043b\u0430\u043c\u0438/Telegram", "started": false}
+{"installed": "test-v2", "prefix": "/tmp/Telegram \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 wvmi9ra8/\u041b\u0430\u0443\u043d\u0447\u0435\u0440 \u0441 \u043f\u0440\u043e\u0431\u0435\u043b\u0430\u043c\u0438/Telegram", "started": false}
+
+PASS PTY smoke: chat, paste/caption, fake send, 100 progress events, scroll, settings return, chat list, draft save, Ctrl+Q, SIXEL output.
+PASS offline pip resolution --platform win_amd64 --python-version 3.14 --abi cp314 (12 Windows/pure wheels, no download).
+PASS TDLib 1.8.66 native transport on Linux: sync getOption, async response, authorizationStateClosed; no login.
+PASS official embedded Python download SHA256.
+NOT RUN Windows runtime/Win32 clipboard/dialog/PortAudio hardware/SIXEL visual host tests.

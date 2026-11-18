@@ -54,10 +54,15 @@ def build(output,platforms=PLATFORMS,handoff=None):
                 for app in ('ttelegram','tspotify'):
                     for folder in ('wheels','runtime'):
                         shutil.rmtree(root/'components'/app/folder,ignore_errors=True)
+            if target_platform=='windows-x86_64':
+                native=root/'components/ttelegram/runtime/windows-native'
+                if not (native/'files.json').is_file():raise RuntimeError('Run tools/download_windows_telegram.py before building Windows')
+            else:
+                shutil.rmtree(root/'components/ttelegram/runtime',ignore_errors=True)
             inventory={p.relative_to(root).as_posix():digest(p) for p in sorted(root.rglob('*')) if p.is_file()}
             manifest={'schema_version':1,'app_id':'ttools','version':__version__,
-                      'platform':target_platform,'complete_suite_supported':target_platform=='linux-x86_64',
-                      'unsupported_components':[] if target_platform=='linux-x86_64' else ['ttelegram'],
+                      'platform':target_platform,'complete_suite_supported':target_platform in ('linux-x86_64','windows-x86_64'),
+                      'unsupported_components':[] if target_platform in ('linux-x86_64','windows-x86_64') else ['ttelegram'],
                       'files':inventory}
             (root/'bundle.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
             verify_bundle(root)

@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "id": "ttelegram",
+  "name": "Telegram",
+  "version": "2026.11.18.7-win1",
+  "release_status": "prerelease-windows-host-unverified",
+  "supported_platforms": [],
+  "candidate_platforms": [
+    "windows-x86_64"
+  ],
+  "prerequisites": [
+    "Windows 10/11 x64",
+    "Windows Terminal >= 1.22 with SIXEL"
+  ],
+  "install_argv": [
+    "${BUNDLE}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${BUNDLE}\\manage.py",
+    "install",
+    "--prefix",
+    "${PREFIX}",
+    "--stop"
+  ],
+  "launch_argv": [
+    "${PREFIX}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${PREFIX}\\manage.py",
+    "launch",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "version_argv": [
+    "${PREFIX}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${PREFIX}\\manage.py",
+    "version",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "doctor_argv": [
+    "${PREFIX}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${PREFIX}\\manage.py",
+    "doctor",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "demo_argv": [
+    "${PREFIX}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${PREFIX}\\manage.py",
+    "launch",
+    "--prefix",
+    "${PREFIX}",
+    "--demo"
+  ],
+  "rollback_argv": [
+    "${PREFIX}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${PREFIX}\\manage.py",
+    "rollback",
+    "--prefix",
+    "${PREFIX}",
+    "--stop"
+  ],
+  "update_manifest_url": null,
+  "update_owner": "ttools",
+  "stop": {
+    "argv": [
+      "${PREFIX}\\bootstrap\\python.exe",
+      "-c",
+      "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+      "${PREFIX}\\manage.py",
+      "stop",
+      "--prefix",
+      "${PREFIX}"
+    ],
+    "method": "cooperative token-scoped request; waits for instance-lock release; no process kill"
+  },
+  "data_paths": [
+    "${LOCALAPPDATA}\\ttools\\ttelegram-data",
+    "${USERPROFILE}\\.cache\\ttelegram",
+    "${USERPROFILE}\\Downloads"
+  ],
+  "results": {
+    "windows_host_tested": false,
+    "linux_shared_vt_smoke": "passed",
+    "offline_windows_wheel_resolution": "passed",
+    "native_tdlib_transport_linux": "passed",
+    "transaction_simulation": "passed; Windows execution stubbed",
+    "hardware_microphone_tested": false
+  },
+  "placeholder_contract": "Each array element is one argv value; ttools substitutes BUNDLE/PREFIX/LOCALAPPDATA/USERPROFILE; no shell expansion."
+}

@@ -19,3 +19,5 @@ and checksum manifests supplied by the tspotify package.
 
 No user venv, account configuration, credentials, message databases or logs are
 included. The public Riseup CA certificate is application data, not a private key.
+
+Нативный Windows preview ttelegram содержит отдельный fork python-telegram `2.0.0+ttnative.1`, TDLib 1.8.66 и Python embedded. Исходники fork и патча tg находятся в `components/ttelegram/windows-native/source/vendor/`, лицензии — в соседнем `licenses/`. Бинарная поставка и её происхождение описаны в HANDOFF.md и python-runtime-provenance.json. Linux-компонент не заменён.

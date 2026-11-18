@@ -1,0 +1,84 @@
+[
+  {
+    "file": "cffi-2.1.1-cp314-cp314-win_amd64.whl",
+    "sha256": "3222ba5d678f80a030e6afbcc33dc1ae5cb45facabb61cee2c7016b8432fde48",
+    "licenses": [
+      "licenses/cffi-2.1.1-cp314-cp314-win_amd64/cffi-2.1.1.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "imageio_ffmpeg-0.6.0-py3-none-win_amd64.whl",
+    "sha256": "02fa47c83703c37df6bfe4896aab339013f62bf02c5ebf2dce6da56af04ffc0a",
+    "licenses": [
+      "licenses/imageio_ffmpeg-0.6.0-py3-none-win_amd64/imageio_ffmpeg-0.6.0.dist-info/LICENSE"
+    ]
+  },
+  {
+    "file": "pillow-13.0.0-cp314-cp314-win_amd64.whl",
+    "sha256": "f7cbb7a64e7ec664775195e4f81923bc8a93d9451b963f844e59118f63147a7a",
+    "licenses": [
+      "licenses/pillow-13.0.0-cp314-cp314-win_amd64/pillow-13.0.0.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "pycparser-3.12-py3-none-any.whl",
+    "sha256": "a076f3f489b39b43ed13563a1dafe42447445bec2e294154ec5c57fcdda4c85e",
+    "licenses": [
+      "licenses/pycparser-3.12-py3-none-any/pycparser-3.12.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "python_telegram-2.0.0+ttnative.1-py3-none-any.whl",
+    "sha256": "2f75a2dd35c90b0de42eca9bed664debcce96afcbaeeab0e98303732b0a3ee54",
+    "licenses": [
+      "licenses/python_telegram-2.0.0+ttnative.1-py3-none-any/python_telegram-2.0.0+ttnative.1.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "qrcode-8.2-py3-none-any.whl",
+    "sha256": "16e64e0716c14960108e85d853062c9e8bba5ca8252c0b4d0231b9df4060ff4f",
+    "licenses": [
+      "licenses/qrcode-8.2-py3-none-any/qrcode-8.2.dist-info/LICENSE"
+    ]
+  },
+  {
+    "file": "rlottie_python-1.3.8-cp37-abi3-win_amd64.whl",
+    "sha256": "c89f0701fe207d734b6e669f9a4c8779b2d5cd6a015baa59023a66a4f3923ec1",
+    "licenses": [
+      "licenses/rlottie_python-1.3.8-cp37-abi3-win_amd64/rlottie_python-1.3.8.dist-info/LICENSE"
+    ]
+  },
+  {
+    "file": "sounddevice-0.5.3-py3-none-win_amd64.whl",
+    "sha256": "f55ad20082efc2bdec06928e974fbcae07bc6c405409ae1334cefe7d377eb687",
+    "licenses": [
+      "licenses/sounddevice-0.5.3-py3-none-win_amd64/sounddevice-0.5.3.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "standard_mailcap-3.13.0-py3-none-any.whl",
+    "sha256": "4f509e11cb5a4700e91118630447643398b183ff3bb734011c8c030b3d671f0a",
+    "licenses": [
+      "licenses/standard_mailcap-3.13.0-py3-none-any/standard_mailcap-3.13.0.dist-info/LICENSE"
+    ]
+  },
+  {
+    "file": "tdjson-1.8.66-cp314-cp314-win_amd64.whl",
+    "sha256": "4d050b331e85ea3af225355981da0aef58a2cf547ba58d482662f42a1bcdef97",
+    "licenses": [
+      "licenses/tdjson-1.8.66-cp314-cp314-win_amd64/tdjson-1.8.66.dist-info/licenses/LICENSE"
+    ]
+  },
+  {
+    "file": "telegram_text-0.2.0-py3-none-any.whl",
+    "sha256": "5752744dc5f91f3f7f0ec1becbf10adb86d586d9338e0aef74fd76a7261283ca",
+    "licenses": [
+      "licenses/telegram_text-0.2.0-py3-none-any/telegram_text-0.2.0.dist-info/LICENSE"
+    ]
+  },
+  {
+    "file": "tg-0.26.0-py3-none-any.whl",
+    "sha256": "fae9ce6094107ae2b0bb6ccd2e31c5e5c67678f267cad2bbb6c7c1f2e3ac6f0e",
+    "licenses": []
+  }
+]

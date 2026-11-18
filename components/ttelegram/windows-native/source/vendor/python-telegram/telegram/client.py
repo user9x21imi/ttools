@@ -1,0 +1,1101 @@
+from __future__ import annotations
+
+import base64
+import enum
+import getpass
+import hashlib
+import logging
+import queue
+import signal
+import tempfile
+import threading
+import time
+import typing
+from collections import defaultdict
+from collections.abc import Callable
+from pathlib import Path
+from types import FrameType
+from typing import (
+    Any,
+    Literal,
+)
+
+from telegram import VERSION
+from telegram.tdjson import ClientDestroyedError, TDJson
+from telegram.text import Element
+from telegram.utils import AsyncResult
+from telegram.worker import BaseWorker, SimpleWorker
+
+logger = logging.getLogger(__name__)
+
+
+MESSAGE_HANDLER_TYPE: str = "updateNewMessage"
+
+# how long `stop` waits for tdlib to report the CLOSED authorization state
+DEFAULT_CLOSE_TIMEOUT: float = 5.0
+
+
+class AuthorizationState(enum.Enum):
+    NONE = None
+    WAIT_CODE = "authorizationStateWaitCode"
+    WAIT_PASSWORD = "authorizationStateWaitPassword"
+    WAIT_TDLIB_PARAMETERS = "authorizationStateWaitTdlibParameters"
+    # only tdlib 1.8.5 and older emit this state, newer versions take the
+    # encryption key in setTdlibParameters
+    WAIT_ENCRYPTION_KEY = "authorizationStateWaitEncryptionKey"
+    WAIT_PHONE_NUMBER = "authorizationStateWaitPhoneNumber"
+    WAIT_PREMIUM_PURCHASE = "authorizationStateWaitPremiumPurchase"
+    WAIT_EMAIL_ADDRESS = "authorizationStateWaitEmailAddress"
+    WAIT_EMAIL_CODE = "authorizationStateWaitEmailCode"
+    WAIT_OTHER_DEVICE_CONFIRMATION = "authorizationStateWaitOtherDeviceConfirmation"
+    WAIT_REGISTRATION = "authorizationStateWaitRegistration"
+    READY = "authorizationStateReady"
+    LOGGING_OUT = "authorizationStateLoggingOut"
+    CLOSING = "authorizationStateClosing"
+    CLOSED = "authorizationStateClosed"
+    UNKNOWN = "unknown"
+
+    @classmethod
+    def _missing_(cls, value: object) -> AuthorizationState:
+        """
+        tdlib adds authorization states over time, and a state this library has
+        never heard of must not turn into a ValueError halfway through login.
+        """
+        logger.warning("Unknown authorization state %r, treating it as UNKNOWN", value)
+
+        return cls.UNKNOWN
+
+
+class Telegram:
+    def __init__(
+        self,
+        api_id: int,
+        api_hash: str,
+        database_encryption_key: str | bytes,
+        phone: str | None = None,
+        bot_token: str | None = None,
+        library_path: str | None = None,
+        worker: type[BaseWorker] | None = None,
+        files_directory: str | Path | None = None,
+        use_test_dc: bool = False,
+        use_message_database: bool = True,
+        device_model: str = "python-telegram",
+        application_version: str = VERSION,
+        system_version: str = "unknown",
+        system_language_code: str = "en",
+        login: bool = False,
+        default_workers_queue_size: int = 1000,
+        tdlib_verbosity: int = 2,
+        proxy_server: str = "",
+        proxy_port: int = 0,
+        proxy_type: dict[str, str] | None = None,
+        use_secret_chats: bool = True,
+    ) -> None:
+        """
+        Args:
+            api_id - ID of your app (https://my.telegram.org/apps/)
+            api_hash - api_hash of your app (https://my.telegram.org/apps/)
+            phone - your phone number
+            library_path - you can change path to the compiled libtdjson library
+            worker - worker to process updates
+            files_directory - directory for the tdlib's files (database, images, etc.)
+            use_test_dc - use test datacenter
+            use_message_database
+            use_secret_chats
+            device_model
+            application_version
+            system_version
+            system_language_code
+        """
+        self.api_id = api_id
+        self.api_hash = api_hash
+        self.library_path = library_path
+        self.phone = phone
+        self.bot_token = bot_token
+        self.use_test_dc = use_test_dc
+        self.device_model = device_model
+        self.system_version = system_version
+        self.system_language_code = system_language_code
+        self.application_version = application_version
+        self.use_message_database = use_message_database
+        self._queue_put_timeout = 10
+        self.proxy_server = proxy_server
+        self.proxy_port = proxy_port
+        self.proxy_type = proxy_type
+        self.use_secret_chats = use_secret_chats
+        self.authorization_state = AuthorizationState.NONE
+
+        if not self.bot_token and not self.phone:
+            raise ValueError("You must provide bot_token or phone")
+
+        self._database_encryption_key = database_encryption_key
+        if isinstance(self._database_encryption_key, str):
+            self._database_encryption_key = self._database_encryption_key.encode()
+
+        self._database_encryption_key = base64.b64encode(self._database_encryption_key).decode()
+
+        if not files_directory:
+            hasher = hashlib.md5()
+            str_to_encode: str = self.phone or self.bot_token  # type: ignore
+            hasher.update(str_to_encode.encode("utf-8"))
+            directory_name = hasher.hexdigest()
+            files_directory = Path(tempfile.gettempdir()) / ".tdlib_files" / directory_name
+
+        self.files_directory = Path(files_directory)
+
+        self._authorized = False
+        self._stopped = threading.Event()
+
+        # todo: move to worker
+        self._workers_queue: queue.Queue = queue.Queue(maxsize=default_workers_queue_size)
+
+        if not worker:
+            worker = SimpleWorker
+        self.worker: BaseWorker = worker(queue=self._workers_queue)
+
+        self._results: dict[str, AsyncResult] = {}
+        self._update_handlers: defaultdict[str, list[Callable]] = defaultdict(list)
+
+        self._tdjson = TDJson(library_path=library_path, verbosity=tdlib_verbosity)
+        self._run()
+
+        if login:
+            self.login()
+
+    def stop(self, close_timeout: float = DEFAULT_CLOSE_TIMEOUT) -> None:
+        """
+        Stops the client.
+
+        Args:
+            close_timeout: how long to wait for tdlib to close the session
+                before shutting down anyway
+        """
+
+        if self._stopped.is_set():
+            return
+
+        logger.info("Stopping telegram client...")
+
+        try:
+            self._close(timeout=close_timeout)
+        except Exception:
+            # a broken or unresponsive tdlib must not prevent the shutdown:
+            # everything below has to run, otherwise `idle` never returns,
+            # the listener thread keeps going and the tdlib client leaks
+            logger.exception("Could not close the tdlib session cleanly, stopping anyway")
+
+        self._stopped.set()
+        self.worker.stop()
+
+        # wait for the tdjson listener to stop
+        self._td_listener.join()
+
+        if hasattr(self, "_tdjson"):
+            self._tdjson.stop()
+
+    def _close(self, timeout: float = DEFAULT_CLOSE_TIMEOUT) -> None:
+        """
+        Calls `close` tdlib method and waits until authorization_state becomes CLOSED.
+
+        Blocking, but gives up after `timeout` seconds.
+        """
+        self.call_method("close")
+
+        deadline = time.monotonic() + timeout
+
+        while self.authorization_state != AuthorizationState.CLOSED:
+            time_left = deadline - time.monotonic()
+
+            if time_left <= 0:
+                logger.warning(
+                    "tdlib has not reached the CLOSED state in %s seconds, last known state: %s",
+                    timeout,
+                    self.authorization_state,
+                )
+                return
+
+            result = self.get_authorization_state()
+            self.authorization_state = self._wait_authorization_result(result, timeout=time_left)
+            logger.info("Authorization state: %s", self.authorization_state)
+            time.sleep(0.5)
+
+    def parse_text_entities(self, text: str, parse_mode: Literal["HTML", "Markdown"]) -> AsyncResult:
+        """
+        Parses text from 'HTML' and 'Markdown' (not MarkdownV2) into plain
+        text and internal telegram style description.
+
+        Args:
+            text
+            parse_mode
+
+        Returns:
+            AsyncResult
+
+            The update will be::
+
+                {
+                    '@type': 'formattedText',
+                    'text': 'Hello world!',
+                    'entities': [
+                        {
+                            '@type': 'textEntity',
+                            'offset': 0,
+                            'length': 12,
+                            'type': {
+                                '@type': 'textEntityTypeSpoiler'
+                            }
+                        }
+                        ...
+                    ]
+                }
+        """
+
+        parse_mode_types = {
+            "HTML": "textParseModeHTML",
+            "Markdown": "textParseModeMarkdown",
+        }
+        data = {
+            "@type": "parseTextEntities",
+            "text": text,
+            "parse_mode": {
+                "@type": parse_mode_types[parse_mode],
+            },
+        }
+
+        return self._send_data(data)
+
+    def send_message(
+        self,
+        chat_id: int,
+        text: str | Element,
+        entities: list[dict] | None = None,
+    ) -> AsyncResult:
+        """
+        Sends a message to a chat. The chat must be in the tdlib's database.
+        If there is no chat in the DB, tdlib returns an error.
+        Chat is being saved to the database when the client receives a message or when you call the `get_chats` method.
+
+        Args:
+            chat_id
+            text
+
+        Returns:
+            AsyncResult
+
+            The update will be::
+
+                {
+                    '@type': 'message',
+                    'id': 1,
+                    'sender_user_id': 2,
+                    'chat_id': 3,
+                    ...
+                }
+        """
+
+        if entities is None:
+            entities = []
+
+        updated_text: str
+        if isinstance(text, Element):
+            result = self.parse_text_entities(text.to_html(), parse_mode="HTML")
+            result.wait(raise_exc=True)
+            if result.update is None:
+                raise RuntimeError(f"Failed to parse text entities: {result.error_info}")
+            update: dict = result.update
+            entities = update["entities"]
+            updated_text = update["text"]
+        else:
+            updated_text = text
+
+        data = {
+            "@type": "sendMessage",
+            "chat_id": chat_id,
+            "input_message_content": {
+                "@type": "inputMessageText",
+                "text": {
+                    "@type": "formattedText",
+                    "text": updated_text,
+                    "entities": entities,
+                },
+            },
+        }
+
+        return self._send_data(data)
+
+    def import_contacts(self, contacts: list[dict[str, str]]) -> AsyncResult:
+        """
+        Adds new contacts or edits existing contacts by their phone numbers.
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1import_contacts.html
+
+        Args:
+            contacts
+
+        ``contacts`` is a list of the form::
+
+            [
+                {
+                    "phone_number": "+380 12 345 67 89",
+                    "first_name": "Name",
+                    "last_name": "Surname"
+                },
+                {
+                    "phone_number": "+380 09 876 54 32",
+                    "first_name": "Name",
+                    "last_name": "Surname"
+                },
+                ...
+            ]
+
+        The phone number format is country-specific.
+
+        Returns:
+            AsyncResult
+
+            The update will be::
+
+                {
+                    '@type': 'importedContacts',
+                    'user_ids': [1, 2],
+                    'importer_count': [3, 4],
+                    ...
+                }
+        """
+
+        for contact in contacts:
+            contact["@type"] = "importedContact"
+
+        data = {
+            "@type": "importContacts",
+            "contacts": contacts,
+        }
+
+        return self._send_data(data)
+
+    def get_chat(self, chat_id: int) -> AsyncResult:
+        """
+        This is offline request, if there is no chat in your database it will not be found
+        tdlib saves chat to the database when it receives a new message or when you call `get_chats` method.
+        """
+        data = {"@type": "getChat", "chat_id": chat_id}
+
+        return self._send_data(data)
+
+    def get_me(self) -> AsyncResult:
+        """
+        Requests information of the current user (getMe method)
+
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1get_me.html
+        """
+
+        return self.call_method("getMe")
+
+    def get_user(self, user_id: int) -> AsyncResult:
+        """
+        Requests information about a user with id = user_id.
+
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1get_user.html
+        """
+
+        return self.call_method("getUser", params={"user_id": user_id})
+
+    def get_user_full_info(self, user_id: int) -> AsyncResult:
+        """
+        Requests the full information about a user with id = user_id.
+
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1get_user_full_info.html
+        """
+
+        return self.call_method("getUserFullInfo", params={"user_id": user_id})
+
+    def get_chats(self, limit: int = 100, chat_list: dict | None = None) -> AsyncResult:
+        """
+        Returns an ordered list of chats from the beginning of a chat list.
+
+        tdlib loads chats from the server until ``limit`` chats are available
+        or the end of the list is reached, so this method also saves those
+        chats to the database.
+
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1get_chats.html
+
+        Args:
+            limit: the maximum number of chats to return
+            chat_list: the chat list to return chats from, the main chat list
+                if not set. For example: ``{'@type': 'chatListArchive'}``
+
+        Returns:
+            AsyncResult
+
+            The update will be::
+
+                {
+                    '@type': 'chats',
+                    'total_count': 10,
+                    'chat_ids': [...],
+                    '@extra': {
+                        'request_id': '...'
+                    }
+                }
+        """
+        data = {
+            "@type": "getChats",
+            "chat_list": chat_list,
+            "limit": limit,
+        }
+
+        return self._send_data(data)
+
+    def load_chats(self, limit: int = 100, chat_list: dict | None = None) -> AsyncResult:
+        """
+        Loads more chats from a chat list.
+
+        The chats are not returned by this method, they are sent through
+        updates. tdlib chooses how many chats to load and can load fewer
+        than ``limit``.
+
+        https://core.telegram.org/tdlib/docs/classtd_1_1td__api_1_1load_chats.html
+
+        Args:
+            limit: the maximum number of chats to load
+            chat_list: the chat list to load chats from, the main chat list
+                if not set. For example: ``{'@type': 'chatListArchive'}``
+
+        Returns:
+            AsyncResult
+
+            The update will be ``{'@type': 'ok'}``, or an error with the code
+            404 when all the chats in the list have already been loaded.
+        """
+        data = {
+            "@type": "loadChats",
+            "chat_list": chat_list,
+            "limit": limit,
+        }
+
+        return self._send_data(data)
+
+    def get_chat_history(
+        self,
+        chat_id: int,
+        limit: int = 100,
+        from_message_id: int = 0,
+        offset: int = 0,
+        only_local: bool = False,
+    ) -> AsyncResult:
+        """
+        Returns history of a chat
+
+        Args:
+            chat_id
+            limit
+            from_message_id
+            offset
+            only_local
+        """
+        data = {
+            "@type": "getChatHistory",
+            "chat_id": chat_id,
+            "limit": limit,
+            "from_message_id": from_message_id,
+            "offset": offset,
+            "only_local": only_local,
+        }
+
+        return self._send_data(data)
+
+    def get_message(
+        self,
+        chat_id: int,
+        message_id: int,
+    ) -> AsyncResult:
+        """
+        Return a message via its message_id
+
+        Args:
+            chat_id
+            message_id
+
+        Returns:
+            AsyncResult
+
+            The update will be::
+
+                {
+                    '@type': 'message',
+                    'id': 1,
+                    'sender_user_id': 2,
+                    'chat_id': 3,
+                    'content': {...},
+                    ...
+                }
+        """
+        data = {
+            "@type": "getMessage",
+            "chat_id": chat_id,
+            "message_id": message_id,
+        }
+
+        return self._send_data(data)
+
+    def delete_messages(self, chat_id: int, message_ids: list[int], revoke: bool = True) -> AsyncResult:
+        """
+        Delete a list of messages in a chat
+
+        Args:
+            chat_id
+            message_ids
+            revoke
+        """
+
+        return self._send_data(
+            {
+                "@type": "deleteMessages",
+                "chat_id": chat_id,
+                "message_ids": message_ids,
+                "revoke": revoke,
+            }
+        )
+
+    def get_supergroup_full_info(self, supergroup_id: int) -> AsyncResult:
+        """
+        Get the full info of a supergroup
+
+        Args:
+            supergroup_id
+        """
+
+        return self._send_data({"@type": "getSupergroupFullInfo", "supergroup_id": supergroup_id})
+
+    def create_basic_group_chat(self, basic_group_id: int) -> AsyncResult:
+        """
+        Create a chat from a basic group
+
+        Args:
+            basic_group_id
+        """
+
+        return self._send_data({"@type": "createBasicGroupChat", "basic_group_id": basic_group_id})
+
+    def get_web_page_instant_view(self, url: str, only_local: bool = False) -> AsyncResult:
+        """
+        Use this method to request instant preview of a webpage.
+        Returns error with 404 if there is no preview for this webpage.
+
+        Args:
+            url: URL of a webpage
+            only_local: If true, the instant view is built from locally available
+                        information only, without any network requests
+        """
+        data = {"@type": "getWebPageInstantView", "url": url, "only_local": only_local}
+
+        return self._send_data(data)
+
+    def call_method(
+        self,
+        method_name: str,
+        params: dict[str, Any] | None = None,
+        block: bool = False,
+    ) -> AsyncResult:
+        """
+        Use this method to call any other method of the tdlib
+
+        Args:
+            method_name: Name of the method
+            params: parameters
+        """
+        data = {"@type": method_name}
+
+        if params:
+            data.update(params)
+
+        return self._send_data(data, block=block)
+
+    def _run(self) -> None:
+        self._td_listener = threading.Thread(target=self._listen_to_td)
+        self._td_listener.daemon = True
+        self._td_listener.start()
+
+        self.worker.run()
+
+    def _listen_to_td(self) -> None:
+        logger.info("[Telegram.td_listener] started")
+
+        while not self._stopped.is_set():
+            try:
+                update = self._tdjson.receive()
+
+                if update:
+                    self._update_async_result(update)
+                    self._run_handlers(update)
+            except ClientDestroyedError:
+                # nothing left to listen to, and retrying would spin
+                logger.info("[Telegram.td_listener] the tdlib client is gone, stopping")
+                break
+            except Exception:
+                if self._stopped.is_set():
+                    break
+                logger.exception("[Telegram.td_listener] error processing update")
+
+    def _update_async_result(self, update: dict[Any, Any]) -> AsyncResult | None:
+        async_result = None
+
+        _special_types = ("updateAuthorizationState",)  # for authorizationProcess @extra.request_id doesn't work
+
+        if update.get("@type") in _special_types:
+            request_id = update["@type"]
+        else:
+            request_id = update.get("@extra", {}).get("request_id")
+
+        if not request_id:
+            logger.debug("request_id has not been found in the update")
+        else:
+            async_result = self._results.get(request_id)
+
+        if not async_result:
+            logger.debug("async_result has not been found in by request_id=%s", request_id)
+        else:
+            done = async_result.parse_update(update)
+
+            if done:
+                self._results.pop(request_id, None)
+
+        return async_result
+
+    def _run_handlers(self, update: dict[Any, Any]) -> None:
+        update_type: str = update.get("@type", "unknown")
+
+        for handler in self._update_handlers[update_type]:
+            try:
+                self._workers_queue.put((handler, update), timeout=self._queue_put_timeout)
+            except queue.Full:
+                logger.error("Handler queue full, dropping update %s for handler %s", update_type, handler)
+
+    def remove_update_handler(self, handler_type: str, func: Callable) -> None:
+        """
+        Remove a handler with the specified type
+        """
+        try:
+            self._update_handlers[handler_type].remove(func)
+        except (ValueError, KeyError):
+            # not in the list
+            pass
+
+    def add_message_handler(self, func: Callable) -> None:
+        self.add_update_handler(MESSAGE_HANDLER_TYPE, func)
+
+    def add_update_handler(self, handler_type: str, func: Callable) -> None:
+        if func not in self._update_handlers[handler_type]:
+            self._update_handlers[handler_type].append(func)
+
+    def _send_data(
+        self,
+        data: dict[Any, Any],
+        result_id: str | None = None,
+        block: bool = False,
+    ) -> AsyncResult:
+        """
+        Sends data to tdlib.
+
+        If `block`is True, waits for the result
+        """
+
+        if "@extra" not in data:
+            data["@extra"] = {}
+
+        if not result_id and "request_id" in data["@extra"]:
+            result_id = data["@extra"]["request_id"]
+
+        if result_id:
+            pending = self._results.get(result_id)
+
+            if pending is not None and not pending._ready.is_set():
+                # Overwriting the entry would leave `pending` unreachable from
+                # `_update_async_result`, so nothing would ever resolve it and
+                # anyone waiting on it would block forever.
+                raise RuntimeError(
+                    f"A request with id={result_id} is already in flight. "
+                    "Authorization calls share a fixed request id, so they cannot be made concurrently."
+                )
+
+        async_result = AsyncResult(client=self, result_id=result_id)
+        data["@extra"]["request_id"] = async_result.id
+        self._results[async_result.id] = async_result
+        self._tdjson.send(data)
+        async_result.request = data
+
+        if block:
+            async_result.wait(raise_exc=True)
+
+        return async_result
+
+    def idle(
+        self,
+        stop_signals: tuple = (
+            signal.SIGINT,
+            signal.SIGTERM,
+            signal.SIGABRT,
+        ),
+    ) -> None:
+        """
+        Blocks until one of the exit signals is received.
+        When a signal is received, calls `stop`.
+        """
+
+        for sig in stop_signals:
+            signal.signal(sig, self._stop_signal_handler)
+
+        self._stopped.wait()
+
+    def _stop_signal_handler(self, signum: int, frame: FrameType | None = None) -> None:
+        logger.info("Signal %s received!", signum)
+        self.stop()
+
+    def get_authorization_state(self) -> AsyncResult:
+        logger.debug("Getting authorization state")
+        data = {"@type": "getAuthorizationState"}
+
+        return self._send_data(data, result_id="getAuthorizationState")
+
+    def _wait_authorization_result(self, result: AsyncResult, timeout: float | None = None) -> AuthorizationState:
+        authorization_state = None
+
+        if result:
+            result.wait(timeout=timeout, raise_exc=True)
+
+            if result.update is None:
+                raise RuntimeError("Something wrong, the result update is None")
+
+            if result.id == "getAuthorizationState":
+                authorization_state = result.update["@type"]
+            else:
+                authorization_state = result.update["authorization_state"]["@type"]
+
+        return AuthorizationState(authorization_state)
+
+    def login(self, blocking: bool = True) -> AuthorizationState:
+        """
+        Login process.
+
+        Must be called before any other call.
+        It sends initial params to the tdlib, sets database encryption key, etc.
+
+        args:
+          blocking [bool]: If True, the process is blocking and the client
+                           expects password and code from stdin.
+                           If False, `login` call returns next AuthorizationState and
+                           the login process can be continued (with calling login(blocking=False) again)
+                           after the necessary action is completed.
+
+        Returns:
+         - AuthorizationState.WAIT_CODE if a telegram code is required.
+           The caller should ask the telegram code
+           to the end user then call send_code(code)
+         - AuthorizationState.WAIT_EMAIL_ADDRESS if an email address is required.
+           The caller should ask the email address
+           to the end user and then call send_email_address(email_address)
+         - AuthorizationState.WAIT_EMAIL_CODE if an email code is required.
+           The caller should ask the code sent to the email address
+           to the end user and then call send_email_code(code)
+         - AuthorizationState.WAIT_PASSWORD if a telegram password is required.
+           The caller should ask the telegram password
+           to the end user and then call send_password(password)
+         - AuthorizationState.WAIT_REGISTRATION if a the user must finish registration
+           The caller should ask the first and last names
+           to the end user and then call register_user(first, last)
+         - AuthorizationState.READY if the login process succeeded.
+        """
+
+        if self.proxy_server:
+            self._send_add_proxy()
+
+        actions: dict[AuthorizationState, Callable[[], AsyncResult]] = {
+            AuthorizationState.NONE: self.get_authorization_state,
+            AuthorizationState.WAIT_TDLIB_PARAMETERS: self._set_initial_params,
+            AuthorizationState.WAIT_ENCRYPTION_KEY: self._send_encryption_key,
+            AuthorizationState.WAIT_PHONE_NUMBER: self._send_phone_number_or_bot_token,
+            AuthorizationState.WAIT_EMAIL_ADDRESS: self._send_email_address,
+            AuthorizationState.WAIT_EMAIL_CODE: self._send_email_code,
+            AuthorizationState.WAIT_CODE: self._send_telegram_code,
+            AuthorizationState.WAIT_PASSWORD: self._send_password,
+            AuthorizationState.WAIT_REGISTRATION: self._register_user,
+        }
+
+        blocking_actions = (
+            AuthorizationState.WAIT_CODE,
+            AuthorizationState.WAIT_EMAIL_ADDRESS,
+            AuthorizationState.WAIT_EMAIL_CODE,
+            AuthorizationState.WAIT_PASSWORD,
+            AuthorizationState.WAIT_REGISTRATION,
+        )
+
+        if self.phone:
+            logger.info("[login] Login process has been started with phone")
+        else:
+            logger.info("[login] Login process has been started with bot token")
+
+        while self.authorization_state != AuthorizationState.READY:
+            logger.info("[login] current authorization state: %s", self.authorization_state)
+
+            if not blocking and self.authorization_state in blocking_actions:
+                return self.authorization_state
+
+            action = actions.get(self.authorization_state)
+
+            if action is None:
+                raise RuntimeError(
+                    f"Can not continue the login process from the authorization state {self.authorization_state}"
+                )
+
+            result = action()
+
+            if not isinstance(result, AuthorizationState):
+                self.authorization_state = self._wait_authorization_result(result)
+            else:
+                self.authorization_state = result
+
+        return self.authorization_state
+
+    def _set_initial_params(self) -> AsyncResult:
+        logger.info(
+            "Setting tdlib initial params: files_dir=%s, test_dc=%s",
+            self.files_directory,
+            self.use_test_dc,
+        )
+
+        parameters = {
+            "use_test_dc": self.use_test_dc,
+            "api_id": self.api_id,
+            "api_hash": self.api_hash,
+            "device_model": self.device_model,
+            "system_version": self.system_version,
+            "application_version": self.application_version,
+            "system_language_code": self.system_language_code,
+            "database_directory": str(self.files_directory / "database"),
+            "use_message_database": self.use_message_database,
+            "files_directory": str(self.files_directory / "files"),
+            "use_secret_chats": self.use_secret_chats,
+        }
+        data: dict[str, typing.Any] = {
+            "@type": "setTdlibParameters",
+            # since tdlib 1.8.6
+            "database_encryption_key": self._database_encryption_key,
+            **parameters,
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def _send_encryption_key(self) -> AsyncResult:
+        logger.info("Sending encryption key")
+
+        data = {
+            "@type": "checkDatabaseEncryptionKey",
+            "encryption_key": self._database_encryption_key,
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def _send_phone_number_or_bot_token(self) -> AsyncResult:
+        """Sends phone number or a bot_token"""
+
+        if self.phone:
+            return self._send_phone_number()
+        elif self.bot_token:
+            return self._send_bot_token()
+        else:
+            raise RuntimeError("Unknown mode: both bot_token and phone are None")
+
+    def _send_phone_number(self) -> AsyncResult:
+        logger.info("Sending phone number")
+        data = {
+            "@type": "setAuthenticationPhoneNumber",
+            "phone_number": self.phone,
+            "settings": {
+                "@type": "phoneNumberAuthenticationSettings",
+                "allow_flash_call": False,
+                "is_current_phone_number": True,
+            },
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def _send_add_proxy(self) -> AsyncResult:
+        logger.info("Sending addProxy")
+        data = {
+            "@type": "addProxy",
+            "proxy": {
+                "@type": "proxy",
+                "server": self.proxy_server,
+                "port": self.proxy_port,
+                "type": self.proxy_type,
+            },
+            "enable": True,
+        }
+
+        # no fixed result_id: the result is never awaited, and `login` may send
+        # this more than once while a previous addProxy is still in flight
+        return self._send_data(data)
+
+    def _send_bot_token(self) -> AsyncResult:
+        logger.info("Sending bot token")
+        data = {"@type": "checkAuthenticationBotToken", "token": self.bot_token}
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def _send_email_address(self, email_address: str | None = None) -> AsyncResult:
+        logger.info("Sending email address")
+
+        if email_address is None:
+            email_address = input("Enter email address:")
+        data = {
+            "@type": "setAuthenticationEmailAddress",
+            "email_address": email_address,
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def send_email_address(self, email_address: str) -> AuthorizationState:
+        """
+        Sets the email address of the user and continues the authorization process
+
+        Args:
+          email_address: the email address of the user.
+          If email_address is None, it will be asked to the user using the input() function
+
+        Returns
+         - AuthorizationState. The caller has to call `login` to continue the login process.
+
+        Raises:
+         - RuntimeError if the login failed
+        """
+        result = self._send_email_address(email_address)
+        self.authorization_state = self._wait_authorization_result(result)
+
+        return self.authorization_state
+
+    def _send_email_code(self, code: str | None = None) -> AsyncResult:
+        logger.info("Sending email code")
+
+        if code is None:
+            code = input("Enter email code:")
+        data = {
+            "@type": "checkAuthenticationEmailCode",
+            "code": {
+                "@type": "emailAddressAuthenticationCode",
+                "code": str(code),
+            },
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def send_email_code(self, code: str) -> AuthorizationState:
+        """
+        Verifies the code sent to the email address and continues the authorization process
+
+        Args:
+          code: the code to be verified.
+          If code is None, it will be asked to the user using the input() function
+
+        Returns
+         - AuthorizationState. The caller has to call `login` to continue the login process.
+
+        Raises:
+         - RuntimeError if the login failed
+        """
+        result = self._send_email_code(code)
+        self.authorization_state = self._wait_authorization_result(result)
+
+        return self.authorization_state
+
+    def _send_telegram_code(self, code: str | None = None) -> AsyncResult:
+        logger.info("Sending code")
+
+        if code is None:
+            code = input("Enter code:")
+        data = {"@type": "checkAuthenticationCode", "code": str(code)}
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def send_code(self, code: str) -> AuthorizationState:
+        """
+        Verifies a telegram code and continues the authorization process
+
+        Args:
+          code: the code to be verified. If code is None, it will be asked to the user using the input() function
+
+        Returns
+         - AuthorizationState. The called have to call `login` to continue the login process.
+
+        Raises:
+         - RuntimeError if the login failed
+        """
+        result = self._send_telegram_code(code)
+        self.authorization_state = self._wait_authorization_result(result)
+
+        return self.authorization_state
+
+    def _send_password(self, password: str | None = None) -> AsyncResult:
+        logger.info("Sending password")
+
+        if password is None:
+            password = getpass.getpass("Password:")
+        data = {"@type": "checkAuthenticationPassword", "password": password}
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def send_password(self, password: str) -> AuthorizationState:
+        """
+        Verifies a telegram password and continues the authorization process
+
+        Args:
+          password the password to be verified.
+          If password is None, it will be asked to the user using the getpass.getpass() function
+
+        Returns
+         - AuthorizationState. The called have to call `login` to continue the login process.
+
+        Raises:
+          - RuntimeError if the login failed
+
+        """
+        result = self._send_password(password)
+        self.authorization_state = self._wait_authorization_result(result)
+
+        return self.authorization_state
+
+    def _register_user(self, first: str | None = None, last: str | None = None) -> AsyncResult:
+        logger.info("Registering user")
+
+        if first is None:
+            first = input("Enter first name: ")
+
+        if last is None:
+            last = input("Enter last name: ")
+
+        data = {
+            "@type": "registerUser",
+            "first_name": first,
+            "last_name": last,
+        }
+
+        return self._send_data(data, result_id="updateAuthorizationState")
+
+    def register_user(self, first: str, last: str) -> AuthorizationState:
+        """
+        Finishes the new user registration process
+
+        Args:
+          first the user's first name
+          last the user's last name
+          If either argument is None, it will be asked to the user using the input() function
+
+        Returns
+         - AuthorizationState. The called have to call `login` to continue the login process.
+
+        Raises:
+          - RuntimeError if the login failed
+
+        """
+        result = self._register_user(first, last)
+        self.authorization_state = self._wait_authorization_result(result)
+
+        return self.authorization_state

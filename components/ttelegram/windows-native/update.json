@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "app_id": "ttelegram",
+  "version": "2026.11.18.7-win1",
+  "release_status": "prerelease-windows-host-unverified",
+  "artifacts": [
+    {
+      "platform": "windows-x86_64",
+      "url": null,
+      "local_path": "/home/deck/Desktop/ttelegram-windows-native-2026.11.18.7-win1.zip",
+      "sha256": "92a6dc5b030e98ebd331b9fd7bc90577bb548f3e51684d5cd4bc65308ada3275"
+    }
+  ],
+  "install_argv": [
+    "${BUNDLE}\\bootstrap\\python.exe",
+    "-c",
+    "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')",
+    "${BUNDLE}\\manage.py",
+    "install",
+    "--prefix",
+    "${PREFIX}",
+    "--stop"
+  ],
+  "requires_stop": true,
+  "update_manifest_url": null,
+  "update_owner": "ttools",
+  "note": "External release manifest; not embedded in the ZIP to avoid a self-referential archive checksum. No public HTTPS release has been published."
+}

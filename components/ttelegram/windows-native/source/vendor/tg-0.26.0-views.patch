@@ -1,0 +1,11 @@
+--- a/tg/views.py
++++ b/tg/views.py
+@@ -246,7 +246,7 @@
+         if not self.w:
+             return
+         self.win.erase()
+-        line = curses.ACS_VLINE
++        line = ord("|")
+         width = self.w - 1
+ 
+         self.win.vline(0, width, line, self.h)
