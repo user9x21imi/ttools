@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "app_id": "ttelegram",
+  "version": "2026.11.18.4",
+  "artifacts": [
+    {
+      "platform": "linux-x86_64",
+      "url": null,
+      "local_path": "ttelegram-2026.11.18.4-linux-x86_64.tar.gz",
+      "sha256": "0b284a846e6b541090dc38d56643648b090940ac689571ae5e4ab0e985e4f14a"
+    }
+  ],
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "--prefix",
+    "${PREFIX}",
+    "--manifest",
+    "${BUNDLE}/update.json",
+    "--stop"
+  ],
+  "requires_stop": true
+}

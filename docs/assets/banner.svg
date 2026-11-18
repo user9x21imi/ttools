@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="440" viewBox="0 0 1400 440" role="img" aria-label="tTools — one terminal, all your tools">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0c1219"/><stop offset="1" stop-color="#112b36"/></linearGradient><pattern id="dots" width="28" height="28" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#53aeef" opacity=".12"/></pattern></defs>
+<rect width="1400" height="440" rx="24" fill="url(#bg)"/><rect width="1400" height="440" rx="24" fill="url(#dots)"/>
+<g fill="#ecf3f7"><path d="m75 113 92 49-92 49" fill="none" stroke="#1dd787" stroke-width="12"/><text x="184" y="258" font-family="DejaVu Sans,Arial,sans-serif" font-size="101" letter-spacing="-8">t</text><text x="193" y="234" font-family="DejaVu Sans,Arial,sans-serif" font-size="169" font-weight="bold" letter-spacing="-13">Tools</text><path d="M224 257h447" stroke="#ecf3f7" stroke-width="9"/></g>
+<text x="78" y="323" font-family="monospace" font-size="21" fill="#a6becb" letter-spacing="4">ONE TERMINAL. ALL YOUR TOOLS.</text>
+<text x="78" y="370" font-family="monospace" font-size="15" fill="#6f8b9b">ANIMATED WORKSPACE / ONE-COMMAND INSTALL / VERIFIED UPDATES</text>
+<g font-family="monospace" font-size="21"><rect x="875" y="87" width="445" height="266" rx="17" fill="#0c1720" stroke="#233e4d"/><text x="908" y="128" fill="#638296" font-size="14">YOUR LIBRARY</text><text x="908" y="174" fill="#1dd787">01  Spotify</text><text x="908" y="220" fill="#53aeef">02  Telegram</text><text x="908" y="266" fill="#af87ff">03  VPN</text><text x="908" y="312" fill="#ff00af">04  tthings</text><text x="1252" y="174" fill="#1dd787">↵</text></g>
+</svg>

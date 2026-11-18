@@ -1,0 +1,62 @@
+{
+  "id": "tthings",
+  "name": "tthings",
+  "version": "0.7.0",
+  "generated_at_utc": "2026-11-18T09:42:32.067574+00:00",
+  "supported_platforms": {
+    "linux-x86_64": "tested SteamOS glibc 2.43; native symbols require >=2.42",
+    "linux-other": "Python source fallback; untested",
+    "windows": "source compatible; no native build or real OS validation",
+    "macos": "source compatible; no native build or real OS validation"
+  },
+  "prerequisites": {
+    "installer": "Python >=3.10",
+    "linux_runtime": "glibc >=2.42, UTF-8 terminal; no fastfetch needed",
+    "source": "Python >=3.10; psutil on Windows/macOS, tzdata where system zoneinfo is absent",
+    "windows": "Tk for --window",
+    "region": "Linux desktop, Qt6 QML, KWin helpers; live desktop integration unverified"
+  },
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "install",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "launch_argv": [
+    "${PREFIX}/bin/tthings"
+  ],
+  "source_launch_argv": [
+    "python3",
+    "${PREFIX}/bin/tthings"
+  ],
+  "version_argv": [
+    "${PREFIX}/bin/tthings",
+    "--version"
+  ],
+  "update_manifest_url": null,
+  "local_update_manifest": "${BUNDLE}/update.json",
+  "update_owner": "ttools",
+  "stop": {
+    "argv": [
+      "python3",
+      "${BUNDLE}/install.py",
+      "stop",
+      "--prefix",
+      "${PREFIX}"
+    ],
+    "protocol": "SIGINT verified registered prefix processes, wait; Linux tested. Before first managed install ttools must stop its own legacy process."
+  },
+  "data_paths": [
+    "${HOME}/.config/tthings",
+    "${HOME}/.local/state/tthings",
+    "${PREFIX}/.tthings"
+  ],
+  "results": {
+    "effect_count": 200,
+    "tool_count": 11,
+    "external_projects_bundled": false,
+    "unit_tests": 56,
+    "installation_results": "results.json"
+  }
+}

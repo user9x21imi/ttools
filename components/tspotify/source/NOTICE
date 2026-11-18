@@ -1,0 +1,15 @@
+tspotify is an independent project, not affiliated with or endorsed by Spotify.
+Spotify names and artwork remain the property of their respective owners.
+
+The integrated streaming engine is spotify_player v0.25.2:
+https://github.com/aome510/spotify-player
+Copyright its contributors; MIT license.
+The engine is downloaded from that project's official releases, not built from
+the tspotify source. Release archives are checked against pinned SHA-256 hashes.
+
+Runtime dependencies retain their own licenses:
+Pillow (HPND), NumPy (BSD), qrcode (BSD), platformdirs (MIT), HTTPX (BSD),
+SoundCard (BSD), windows-curses and pywinpty (see their installed distributions).
+PyInstaller uses GPL with its bundling exception. Its bootloader exception permits
+distribution of this application; it does not change tspotify's MIT license.
+

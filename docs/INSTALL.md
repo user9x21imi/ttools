@@ -1,0 +1,95 @@
+# Установка и поддерживаемые платформы
+
+Перед первой миграцией закройте прежние окна Spotify/Telegram/VPN/tthings.
+Telegram использует прежнюю базу авторизации: два клиента не должны открывать
+её одновременно. Установка не удаляет её и не запускает клиента сама.
+
+| Платформа | Состав | Состояние |
+|---|---|---|
+| Linux x86_64 / SteamOS | Все четыре приложения + ttools | Комплектный локальный runtime Spotify рассчитан на glibc 2.43; для других систем предусмотрена установка Spotify из исходников |
+| macOS ARM64 / x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
+| Windows x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
+
+Linux Telegram: CPython 3.14, glibc >=2.28, tmux >=3.4, ffmpeg/ffprobe с
+libopus/PulseAudio, ffplay, kdialog, pactl, системный `/usr/bin/python3` с
+PyGObject/GTK3. Для SIXEL нужен соответствующий терминал и tmux; DOTS-режим
+доступен в самом Telegram. PipeWire Pulse/PulseAudio и микрофон нужны голосовым,
+но установщик микрофон не включает. На SteamOS эти зависимости проверяются;
+read-only root не отключается. В Debian/Ubuntu bootstrap может поставить пакеты
+через apt с обычным запросом sudo. На прочих дистрибутивах недостающие пакеты
+нужно предоставить системным пакетным менеджером.
+
+Для Linux VPN нужны bash, curl, iproute2, flock, sudo/visudo. Правила и backend
+устанавливаются штатным установщиком TVPN с правами администратора; VPN при
+установке не подключается. На macOS его native installer готовит Tunnelblick,
+на Windows — официальный OpenVPN и локальную группу. Windows может потребовать
+повторного входа пользователя для применения прав.
+
+Обычные окна tthings требуют Tk. Выделение областей на Linux — Qt6/QML и KWin;
+их наличие не требуется для терминального меню. Внешние 41 проекты tthings
+в комплект не входят и автоматически не устанавливаются.
+
+## Локальный архив без GitHub
+
+Распакуйте ZIP своей ОС. `Install-ttools.sh` / `Install-ttools.command` /
+`Install-ttools.cmd` готовит CPython 3.14 и вызывает install-only. На macOS/Windows
+эти preview-обёртки устанавливают явно неполный комплект без Telegram.
+
+Если CPython 3.14 уже готов, откройте терминал в папке `ttools`:
+
+```sh
+python3 installer.py
+```
+
+Для полной Linux-установки используйте CPython 3.14. На macOS/Windows до
+подготовки native Telegram нужен явный `--allow-partial`:
+
+```sh
+python3 installer.py --allow-partial
+```
+
+Windows-команда Python может называться `py -3.14` вместо `python3`.
+Установка из source-архива может скачивать Python-зависимости Spotify и
+windows-curses/psutil. Локальная поставка `--handoff` содержит Linux native
+Spotify и offline-wheelhouse Telegram; архивы для других ОС их не используют.
+
+Проверить состав до установки:
+
+```sh
+python3 installer.py --plan
+python3 installer.py --plan --allow-partial
+```
+
+Только отдельные компоненты (не полный комплект):
+
+```sh
+python3 installer.py --components tthings
+```
+
+Для проверки в отдельном каталоге, без ярлыков и системного VPN-backend:
+
+```sh
+python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcuts
+```
+
+Этот режим не делает VPN готовым: `complete=false`. Он нужен тестам и
+подготовке пользовательских файлов. Полная установка не использует этот флаг.
+
+## Данные и обновления
+
+Префикс по умолчанию:
+- Linux: `${XDG_DATA_HOME:-~/.local/share}/ttools-suite`;
+- macOS: `~/Library/Application Support/ttools`;
+- Windows: `%LOCALAPPDATA%/ttools`.
+
+В `state.json` записана активная версия. Релизы находятся в `releases/`.
+Новая версия получает новый каталог; работающая версия не перезаписывается.
+Пользовательские данные приложений хранятся вне каталога релиза.
+
+Отключить автоматическую проверку на один запуск: `TTOOLS_AUTOUPDATE=0 ttools`
+(на Unix). Ручная проверка/установка: `ttools --update`. При запуске из исходников
+без установленного suite эти флаги управления не предоставляются.
+
+Удаление пользовательского префикса и ярлыков не удаляет авторизацию приложений.
+Системный VPN-backend и sudoers следует удалять штатными средствами TVPN:
+простое удаление папки ttools не является удалением защищённого VPN-компонента.

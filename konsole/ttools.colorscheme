@@ -1,0 +1,23 @@
+[General]
+Description=ttools translucent dark
+Opacity=0.78
+Blur=true
+Wallpaper=
+
+[Background]
+Color=12,18,25
+
+[BackgroundIntense]
+Color=12,18,25
+
+[BackgroundFaint]
+Color=12,18,25
+
+[Foreground]
+Color=232,240,244
+
+[ForegroundIntense]
+Color=255,255,255
+
+[ForegroundFaint]
+Color=135,154,170

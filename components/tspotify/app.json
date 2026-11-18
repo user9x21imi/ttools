@@ -1,0 +1,104 @@
+{
+  "id": "tspotify",
+  "name": "tspotify",
+  "version": "0.1.0",
+  "source_commit": "b9de12e7124cdfc1b77753a09ab828e4e0885f26",
+  "repository": "https://github.com/user9x21imi/tspotify",
+  "supported_platforms": [
+    {
+      "platform": "linux-x86_64",
+      "status": "tested on SteamOS, glibc 2.43"
+    },
+    {
+      "platform": "macos-arm64",
+      "status": "not supplied in this handoff"
+    },
+    {
+      "platform": "macos-x86_64",
+      "status": "not supplied in this handoff"
+    },
+    {
+      "platform": "windows-x86_64",
+      "status": "not supplied in this handoff"
+    }
+  ],
+  "prerequisites": [
+    "Linux x86_64; this local runtime tested with glibc 2.43",
+    "Python 3.9+ only for installer; application includes Python and dependencies",
+    "UTF-8 terminal, recommended minimum 78x24; standard monospace font, no Nerd Font required",
+    "Working ALSA/PipeWire/PulseAudio audio output for playback",
+    "Spotify Premium, Internet and OAuth needed for music; not for install or demo"
+  ],
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "--prefix",
+    "${PREFIX}",
+    "--manifest",
+    "${BUNDLE}/update.json",
+    "--archive",
+    "${BUNDLE}/runtime/tspotify-linux-x86_64.zip"
+  ],
+  "launch_argv": [
+    "${PREFIX}/bin/tspotify"
+  ],
+  "version_argv": [
+    "${PREFIX}/bin/tspotify",
+    "--version"
+  ],
+  "update_manifest_url": null,
+  "update_manifest_local": "${BUNDLE}/update.json",
+  "update_owner": "ttools",
+  "stop": {
+    "argv": [
+      "${PREFIX}/bin/tspotify",
+      "stop",
+      "--timeout",
+      "15"
+    ],
+    "status_argv": [
+      "${PREFIX}/bin/tspotify",
+      "status"
+    ],
+    "success": "exit 0 and JSON stopped=true after UI and owned engine exit; running=false means already stopped",
+    "on_timeout": "do not update; wait for shutdown or report failure"
+  },
+  "data_paths": [
+    "${HOME}/.config/tspotify",
+    "${HOME}/.local/share/tspotify",
+    "${HOME}/.cache/tspotify",
+    "${HOME}/.cache/spotify-player (legacy OAuth/engine cache if already present)"
+  ],
+  "results": {
+    "install": true,
+    "unicode_spaces_prefix": true,
+    "native_version": true,
+    "dependencies": true,
+    "repeat_install": true,
+    "rollback": true,
+    "bad_version_rejected": true,
+    "running_update_refused": true,
+    "demo_ctrlq": true,
+    "stop_when_inactive": true,
+    "audio_used": false,
+    "oauth_used": false,
+    "unit_tests_passed": 249,
+    "unit_tests_skipped": 1,
+    "native_terminal_normal_and_compact": true,
+    "real_kde_media_routing_and_restore": true,
+    "real_kde_desktop_dispatch_all_six_actions": true,
+    "live_ui_and_engine_stop": true,
+    "physical_keyboard_tested": false,
+    "real_phone_switch_tested": false,
+    "macos_runtime_tested_in_this_handoff": false,
+    "windows_runtime_tested_in_this_handoff": false,
+    "integrated_real_start_twice_muted": true,
+    "integrated_start_seconds": [
+      6.62,
+      2.56
+    ],
+    "ap_port": 443,
+    "real_ui_ready": true,
+    "saved_volume_after_tests": 70
+  }
+}

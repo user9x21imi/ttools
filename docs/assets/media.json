@@ -1,0 +1,38 @@
+{
+  "source": "Offline application demos, fictional Telegram backend, real renderer APIs",
+  "account_data": false,
+  "vpn_connected": false,
+  "audio_played": false,
+  "gifs": [
+    {
+      "file": "demo.gif",
+      "frames": 24,
+      "duration_ms": 4320,
+      "bytes": 1007306
+    },
+    {
+      "file": "spotify.gif",
+      "frames": 11,
+      "duration_ms": 5800,
+      "bytes": 941008
+    },
+    {
+      "file": "telegram.gif",
+      "frames": 11,
+      "duration_ms": 8000,
+      "bytes": 635868
+    },
+    {
+      "file": "vpn.gif",
+      "frames": 27,
+      "duration_ms": 6400,
+      "bytes": 972922
+    },
+    {
+      "file": "tthings.gif",
+      "frames": 30,
+      "duration_ms": 6000,
+      "bytes": 3137745
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="360" viewBox="0 0 1000 360" role="img" aria-label="tTools">
+  <g fill="currentColor" color="#000000">
+    <path d="M30 99 157 165 30 231" fill="none" stroke="currentColor" stroke-width="17" stroke-linejoin="miter"/>
+    <text x="171" y="304" font-family="DejaVu Sans,Arial,sans-serif" font-size="168" letter-spacing="-12">t</text>
+    <text x="179" y="272" font-family="DejaVu Sans,Arial,sans-serif" font-size="262" font-weight="bold" letter-spacing="-20">Tools</text>
+    <path d="M229 300H885" stroke="currentColor" stroke-width="16"/>
+  </g>
+</svg>

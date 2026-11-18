@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tspotify-terminal"
+version = "0.1.0"
+description = "A dotted-art Spotify terminal client for Linux, macOS and Windows Terminal"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "tspotify contributors"}]
+dependencies = [
+  "Pillow>=10.4", "numpy>=2.1", "qrcode>=8.0", "platformdirs>=4.0", "httpx[http2]>=0.28",
+  "windows-curses>=2.4; sys_platform == 'win32'",
+  "pywinpty>=2.0; sys_platform == 'win32'",
+  "soundcard>=0.4.3; sys_platform == 'win32' or sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.9", "build>=1.2", "pyinstaller>=6.12"]
+
+[project.scripts]
+tspotify = "tspotify.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/user9x21imi/tspotify"
+Issues = "https://github.com/user9x21imi/tspotify/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+

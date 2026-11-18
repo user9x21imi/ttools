@@ -1,0 +1,80 @@
+name: Test and release ttools
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Install launcher dependency
+        run: python -m pip install -e .
+      - name: Unit and terminal integration tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify source Spotify dependencies without account or audio
+        run: |
+          python -m pip install ./components/tspotify/source
+          python -m tspotify verify-runtime
+      - name: Check portable tthings without UI
+        shell: bash
+        run: |
+          python -m pip install ./components/tthings/source
+          python -m tthings --version
+          python -m tthings --effect stars --snapshot 64x18
+      - name: Preview platform installation plan
+        run: python installer.py --plan --allow-partial
+  package:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Download pinned Linux Telegram dependencies
+        run: python tools/download_wheels.py
+      - name: Build verified platform archives
+        run: python tools/build_release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ttools-release
+          path: dist/*
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: ttools-release
+          path: dist
+      - name: Publish preview after all checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(python -c 'from ttools import __version__; print(__version__)')
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; immutable artifacts are preserved."
+            exit 0
+          fi
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "ttools $version" --notes-file docs/RELEASE.md --prerelease

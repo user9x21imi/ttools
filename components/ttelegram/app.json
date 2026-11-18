@@ -1,0 +1,94 @@
+{
+  "id": "ttelegram",
+  "name": "ttelegram",
+  "version": "2026.11.18.4",
+  "supported_platforms": [
+    "linux-x86_64"
+  ],
+  "prerequisites": {
+    "required": [
+      "Linux x86_64; glibc >=2.28",
+      "CPython 3.14 with venv/ensurepip and curses",
+      "tmux >=3.4",
+      "ffmpeg + ffprobe with libopus and PulseAudio input",
+      "ffplay",
+      "kdialog (GUI file picker)",
+      "/usr/bin/python3: PyGObject gi + GTK3",
+      "Terminal with SIXEL passthrough for native images; Konsole tested",
+      "PulseAudio or PipeWire Pulse server and microphone for voice capture",
+      "pactl (PulseAudio tools); microphone source, not monitor",
+      "tmux compiled with SIXEL support (tested tmux 3.7b)"
+    ],
+    "bundled": [
+      "tg 0.26.0 + vendor/views.py patch",
+      "python-telegram 2.0.0 including TDLib 1.8.66 Linux x86_64",
+      "Pillow 13.0.0 CPython3.14",
+      "qrcode 8.2",
+      "rlottie-python 1.3.8",
+      "standard-mailcap 3.13.0",
+      "telegram-text 0.2.0"
+    ],
+    "optional": [
+      "wl-paste (wl-clipboard) for native Wayland clipboard; GTK/Xwayland fallback",
+      "less, xdg-open, editor for external file handlers",
+      "xclip or wl-copy for legacy tg copy handlers"
+    ]
+  },
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "launch_argv": [
+    "${PREFIX}/bin/ttelegram"
+  ],
+  "version_argv": [
+    "python3",
+    "${PREFIX}/manage.py",
+    "--prefix",
+    "${PREFIX}",
+    "--version"
+  ],
+  "update_manifest_url": null,
+  "update_manifest_local": "${BUNDLE}/update.json",
+  "update_owner": "ttools",
+  "update_argv": [
+    "python3",
+    "${PREFIX}/manage.py",
+    "--prefix",
+    "${PREFIX}",
+    "--manifest",
+    "${BUNDLE}/update.json",
+    "--stop"
+  ],
+  "stop": {
+    "argv": [
+      "python3",
+      "${PREFIX}/manage.py",
+      "--prefix",
+      "${PREFIX}",
+      "--stop-only"
+    ],
+    "scope": "only installation-specific ttelegram tmux session; SIGTERM worker then wait; no force kill"
+  },
+  "data_paths": [
+    "${HOME}/.config/ttelegram",
+    "${HOME}/.config/tg",
+    "${HOME}/.cache/tg",
+    "${HOME}/.cache/ttelegram",
+    "${HOME}/.local/share/tg"
+  ],
+  "results": {
+    "install_only": "passed offline",
+    "repeat_install": "passed",
+    "update": "passed 2026.11.18.1 -> 2026.11.18.3 local SHA-256 artifact",
+    "rollback": "passed",
+    "bad_hash": "rejected without switching version",
+    "path_with_spaces_and_cyrillic": "passed install + fake runtime",
+    "live_account_login": "not tested in package tests",
+    "public_release_url": null,
+    "report": "${BUNDLE}/test-results.json"
+  },
+  "path_substitution": "${HOME}, ${PREFIX}, ${BUNDLE} must be expanded by ttools; argv is not shell input"
+}

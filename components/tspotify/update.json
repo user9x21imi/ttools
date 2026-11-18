@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "app_id": "tspotify",
+  "version": "0.1.0",
+  "artifacts": [
+    {
+      "platform": "linux-x86_64",
+      "url": null,
+      "local_path": "${BUNDLE}/runtime/tspotify-linux-x86_64.zip",
+      "sha256": "f476532cd37e9c29fd63a1d4fc5358bcf15ce5b0507f124f26b2c51b0a6f6c14"
+    }
+  ],
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "--prefix",
+    "${PREFIX}",
+    "--manifest",
+    "${BUNDLE}/update.json",
+    "--archive",
+    "${BUNDLE}/runtime/tspotify-linux-x86_64.zip"
+  ],
+  "requires_stop": true
+}

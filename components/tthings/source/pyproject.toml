@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tthings"
+version = "0.7.0"
+description = "Portable terminal animation launcher"
+requires-python = ">=3.10"
+dependencies = ["psutil>=7.0; sys_platform != 'linux'", "tzdata>=2025.2; sys_platform == 'win32'"]
+
+[project.scripts]
+tthings = "tthings.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["tthings*"]
+
+[tool.setuptools.package-data]
+tthings = ["assets/*.json"]

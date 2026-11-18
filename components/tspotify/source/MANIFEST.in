@@ -1,0 +1,9 @@
+include LICENSE NOTICE CHANGELOG.md README.md
+graft docs
+graft scripts
+prune .venv
+prune dist
+prune build
+exclude legacy_app.py
+global-exclude __pycache__ *.py[cod] *_token.json credentials.json *.log
+

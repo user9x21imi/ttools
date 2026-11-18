@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "app_id": "tthings",
+  "version": "0.7.0",
+  "generated_at_utc": "2026-11-18T09:42:32.067574+00:00",
+  "requires_stop": true,
+  "install_argv": [
+    "python3",
+    "${BUNDLE}/install.py",
+    "apply",
+    "--prefix",
+    "${PREFIX}"
+  ],
+  "artifacts": [
+    {
+      "platform": "linux-x86_64",
+      "url": null,
+      "path": "runtime/tthings-linux-x86_64",
+      "kind": "executable",
+      "sha256": "e047ae2902710c1c07ceccba5d84b8643081bdd7acc01b937be15cbc510d3ad0",
+      "minimum_glibc": "2.42"
+    },
+    {
+      "platform": "python-source",
+      "url": null,
+      "path": "runtime/tthings.pyz",
+      "kind": "zipapp",
+      "sha256": "9655e16846e0e11f29db024b61bdbce639e99a285634a3c1d3d802617f8c4323",
+      "minimum_python": "3.10"
+    }
+  ]
+}
