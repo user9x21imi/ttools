@@ -13,7 +13,7 @@ import time
 import venv
 
 from .distribution import (REPOSITORY, atomic_json, digest, extract_zip, fetch, locked,
-                           platform_id, prefix_path, read_remote_json, verify_bundle, version_key)
+                           platform_id, prefix_path, read_remote_json, verify_bundle, version_key, configure_text_io)
 
 APP_IDS = ('tspotify','ttelegram','tthings','tvpn')
 
@@ -136,7 +136,7 @@ except (OSError,ValueError,RuntimeError) as error:
         commands=prefix/'bin';commands.mkdir(exist_ok=True)
         for app in ('ttools',*APP_IDS):
             args='' if app=='ttools' else '--app '+app+' '
-            (commands/(app+'.cmd')).write_text('@echo off\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
+            (commands/(app+'.cmd')).write_text('@echo off\r\nchcp 65001 >nul\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
         # Update the user PATH, never the system PATH.
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,'Environment',0,winreg.KEY_READ|winreg.KEY_WRITE) as key:
@@ -358,6 +358,7 @@ def wait_process(child):
 
 
 def launch_installed(prefix,args):
+    configure_text_io()
     prefix=prefix_path(prefix)
     if args and args[0] in ('--update','--rollback','--status'):
         if args[0]=='--update':update(prefix,force=True)
@@ -392,6 +393,7 @@ def launch_installed(prefix,args):
 
 
 def main(argv=None):
+    configure_text_io()
     parser=argparse.ArgumentParser(description='ttools suite install-only')
     parser.add_argument('--prefix')
     parser.add_argument('--bundle',type=Path,default=Path(__file__).resolve().parents[1])

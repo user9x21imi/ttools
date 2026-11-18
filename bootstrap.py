@@ -66,6 +66,11 @@ def prepare_linux(selected):
     else:raise RuntimeError('Missing system prerequisites: '+', '.join(missing)+'. See docs/INSTALL.md.')
 
 def main():
+    if os.name=='nt':
+        os.environ['PYTHONUTF8']='1'
+        os.environ['PYTHONIOENCODING']='utf-8'
+        for stream in (sys.stdout,sys.stderr):
+            if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     p=argparse.ArgumentParser(description='One-command ttools suite bootstrap')
     p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true')
     p.add_argument('--components',default='tspotify,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')

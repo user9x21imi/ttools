@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import platform
 import re
 import stat
+import sys
 import tempfile
 import urllib.parse
 import urllib.request
@@ -14,6 +15,14 @@ import zipfile
 
 REPOSITORY = 'user9x21imi/ttools'
 MAX_ARCHIVE = 700 * 1024 * 1024
+
+def configure_text_io():
+    if os.name=='nt':
+        os.environ['PYTHONUTF8']='1'
+        os.environ['PYTHONIOENCODING']='utf-8'
+        for stream in (sys.stdout,sys.stderr):
+            if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
+
 
 def platform_id(system=None, machine=None):
     system = system or platform.system()

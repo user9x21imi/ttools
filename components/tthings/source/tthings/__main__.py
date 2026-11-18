@@ -8,6 +8,10 @@ from .catalog import BUILTINS,ENTRIES,SYSTEM_TOOLS
 
 
 def main(argv=None):
+    # Distribution adapter: redirected Windows output must preserve Braille/Unicode.
+    if os.name=='nt':
+        for stream in (sys.stdout,sys.stderr):
+            if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     parser=argparse.ArgumentParser(description='tthings — автономный терминальный лаунчер анимаций')
     parser.add_argument('--version',action='version',version=__version__)
     parser.add_argument('--effect',choices=[e.id for e in BUILTINS])

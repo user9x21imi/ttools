@@ -10,7 +10,8 @@
 
 The ttools source adaptation to tspotify adds a Windows implementation of its
 managed installation lock. The tthings InstanceLease adapter accepts
-TTOOLS_TTHINGS_PREFIX so detached windows remain visible to the suite updater. Its license is preserved. The Telegram adapter contains
+TTOOLS_TTHINGS_PREFIX so detached windows remain visible to the suite updater.
+Its Windows CLI also selects UTF-8 for redirected Unicode/Braille output. Its license is preserved. The Telegram adapter contains
 the author's tg/views.py patch and verifies the pinned original file before applying it.
 Telegram runtime dependencies are distributed as unmodified wheels; each wheel
 retains its own licenses. Spotify's optional streaming engine has separate notices

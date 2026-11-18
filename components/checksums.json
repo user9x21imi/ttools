@@ -126,7 +126,7 @@
   "tthings/source/tools/handoff_install.py": "44980c0d78e3c234414f41e97111c4cad9ddfe269b165e5791df6deb0a5680e1",
   "tthings/source/tools/preview.py": "5c06dbd49b2f42d8ca7bb283c8b20799aed541e462068a31f17143dd1717daa1",
   "tthings/source/tthings/__init__.py": "e8a6df11b50fbf9aff1a100b208f94372a08bae69faaf393e0a6777fea12e548",
-  "tthings/source/tthings/__main__.py": "ea5ef312552f4ea5ec02ff327cc2813320fc4ec99c8255c8b5068a64aa164e0b",
+  "tthings/source/tthings/__main__.py": "fff5a1c16a339cf0bf89bbd98261a20cb7a48d8a62cc55771eb66dccb4b7e469",
   "tthings/source/tthings/app.py": "4ce94d08d7161fed539f02be3c874d4ad909a4ab12fb80ffd8c506d40287d870",
   "tthings/source/tthings/assets/logos.json": "4eae02b59d95d696b3f769b7d8712d5567d6fac2e67caff2e1a0f46ee45b4766",
   "tthings/source/tthings/catalog.py": "ddda43675da94933ab51bbc2040f11b3345bb16f6a7ccc4df76028da2584c9b5",

@@ -290,6 +290,8 @@ class UI:
 
 
 def main():
+    from .distribution import configure_text_io
+    configure_text_io()
     parser = argparse.ArgumentParser(description='ttools — единый терминальный клиент')
     parser.add_argument('--import',dest='catalog',help='Подключить папку или apps.local.json')
     parser.add_argument('--list',action='store_true',help='Показать приложения без интерфейса')
