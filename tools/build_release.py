@@ -53,6 +53,7 @@ def build(output,platforms=PLATFORMS,handoff=None):
             else:
                 for app in ('ttelegram','tspotify'):
                     for folder in ('wheels','runtime'):
+                        if app=='ttelegram' and folder=='runtime' and target_platform=='windows-x86_64':continue
                         shutil.rmtree(root/'components'/app/folder,ignore_errors=True)
             if target_platform=='windows-x86_64':
                 native=root/'components/ttelegram/runtime/windows-native'
