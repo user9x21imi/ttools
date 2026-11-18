@@ -8,7 +8,7 @@ Telegram использует прежнюю базу авторизации: д
 |---|---|---|
 | Linux x86_64 / SteamOS | Все четыре приложения + ttools | Комплектный локальный runtime Spotify рассчитан на glibc 2.43; для других систем предусмотрена установка Spotify из исходников |
 | macOS ARM64 / x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
-| Windows x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
+| Windows x86_64 | Опубликованы ttools, Spotify, TVPN, tthings; кандидат добавляет ttelegram | Native Telegram предварительный; ручной smoke, звук и туннель не подтверждены |
 
 Linux Telegram: CPython 3.14, glibc >=2.28, tmux >=3.4, ffmpeg/ffprobe с
 libopus/PulseAudio, ffplay, kdialog, pactl, системный `/usr/bin/python3` с
