@@ -15,7 +15,7 @@ if os.name != "nt":
 
 from ttools import core
 from ttools.__main__ import EFFECTS
-from ttools.visuals.effects import Scene
+from ttools.backgrounds import Scene
 
 class CatalogTests(unittest.TestCase):
     def test_relative_unicode_paths_and_argv_are_preserved(self):
@@ -99,9 +99,12 @@ class TerminalTests(unittest.TestCase):
                         except OSError:
                             break
             try:
-                pump(.5)
+                deadline=time.monotonic()+10
+                while 'ПРИЛОЖЕНИЯ'.encode() not in output and time.monotonic()<deadline:pump(.1)
+                self.assertIn('ПРИЛОЖЕНИЯ'.encode(),output)
                 os.write(master,b'\n')
-                pump(.5)
+                deadline=time.monotonic()+5
+                while b'CHILD_READY' not in output and time.monotonic()<deadline:pump(.1)
                 self.assertIn(b'CHILD_READY',output)
                 self.assertNotIn(b']4;',output)  # Never mutate the terminal ANSI palette.
                 self.assertIn(b';49m',output)  # Default background preserves window opacity.

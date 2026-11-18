@@ -22,7 +22,7 @@ class Core(unittest.TestCase):
             with self.assertRaises(RuntimeError):manage.verify(root)
     def test_pointer_rollback_paths(self):
         with tempfile.TemporaryDirectory(prefix='Telegram тест ') as d:
-            root=Path(d);(root/'versions/v1').mkdir(parents=True);manage.write(root/'current.json',{'version':'v1'});self.assertEqual(manage.current(root),root/'versions/v1')
+            root=Path(d);(root/'versions/v1').mkdir(parents=True);manage.write(root/'current.json',{'version':'v1'});self.assertEqual(manage.current(root),(root/'versions/v1').resolve())
             manage.write(root/'current.json',{'version':'../../outside'})
             with self.assertRaises(RuntimeError):manage.current(root)
     def test_dirty_refresh_does_not_erase_images(self):

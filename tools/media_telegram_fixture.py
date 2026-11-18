@@ -62,4 +62,5 @@ class TG:
 
 import client
 client.app.run_tui=lambda:curses.wrapper(lambda screen:client.app.run(TG(),screen))
-client.run_client()
+with patch('pathlib.Path.home',return_value=folder):
+    client.run_client()

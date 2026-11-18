@@ -7,12 +7,12 @@ from PIL import Image,ImageDraw,ImageFont
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from ttools.__main__ import UI
-from ttools.visuals.effects import Scene
+from ttools.backgrounds import Background
 
 FONT=ImageFont.truetype('/usr/share/fonts/TTF/DejaVuSansMono.ttf',16)
 SMALL=ImageFont.truetype('/usr/share/fonts/TTF/DejaVuSansMono.ttf',12)
-COLORS={1:('#e8f0f4',None),2:('#879aaa',None),3:('#1dd787',None),4:('#53aeef',None),5:('#e8f0f4','#18232e'),6:('#1dd787','#18232e'),7:('#1d303f',None),8:('#283c4b',None)}
-for i,(fg,bg) in enumerate([('#1dd787','#173d29'),('#ff8700','#492f14'),('#ff343b','#491b24'),('#53aeef','#142d4b'),('#af87ff','#332044'),('#ff00af','#42132f')]):
+COLORS={1:('#e8f0f4',None),2:('#879aaa',None),3:('#1dd787',None),4:('#53aeef',None),5:('#e8f0f4','#18232e'),6:('#1dd787','#18232e'),7:('#39416a',None),8:('#674257',None)}
+for i,(fg,bg) in enumerate([('#1dd787','#262626'),('#ff8700','#262626'),('#ff343b','#262626'),('#53aeef','#262626'),('#af87ff','#262626'),('#ff00af','#262626')]):
     COLORS[9+i*2]=(fg,bg);COLORS[10+i*2]=('#e8f0f4',bg)
 
 class Screen:
@@ -24,8 +24,8 @@ class Screen:
 
 def render(t,selection):
     ui=UI.__new__(UI)
-    ui.s=Screen();ui.apps=[{'id':name,'name':name,'command':[sys.executable],'version':version} for name,version in [('tspotify','0.1.0'),('ttelegram','2026.11.18.4'),('tvpn','1.3.1'),('tthings','0.7.0')]]
-    ui.selected=selection;ui.query='';ui.searching=False;ui.status='Готово к запуску';ui.updates={a['id']:'Обновляет ttools · '+a['version'] for a in ui.apps};ui.jobs={};ui.last_check=0;ui.started=-5;ui.splash=False;ui.effect='particles';ui.scene=Scene('particles',seed=11);ui.effect_start=0;ui.next_effect=120
+    ui.s=Screen();ui.apps=[{'id':name,'name':name,'command':[sys.executable],'version':version,'suite_managed':True} for name,version in [('tspotify','0.1.0'),('ttelegram','2026.11.18.4'),('tvpn','1.3.1'),('tthings','0.7.2')]]
+    ui.selected=selection;ui.query='';ui.searching=False;ui.status='Готово к запуску';ui.updates={a['id']:'Обновляет ttools · '+a['version'] for a in ui.apps};ui.jobs={};ui.last_check=0;ui.started=-5;ui.splash=False;ui.background=Background(seed=11,effect='light_bloom',now=0);ui.effect=ui.background.effect;ui._paint_cache={}
     with patch('curses.color_pair',side_effect=lambda n:n),patch('ttools.__main__.time.monotonic',return_value=t),patch('ttools.__main__.time.strftime',return_value='12:00'):
         ui.draw()
     image=Image.new('RGB',(1200,740),'#080e14');draw=ImageDraw.Draw(image)

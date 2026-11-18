@@ -1,8 +1,8 @@
 {
   "id": "tthings",
   "name": "tthings",
-  "version": "0.7.0",
-  "generated_at_utc": "2026-11-18T09:42:32.067574+00:00",
+  "version": "0.7.2",
+  "generated_at_utc": "2026-11-18T10:04:14.516715+00:00",
   "supported_platforms": {
     "linux-x86_64": "tested SteamOS glibc 2.43; native symbols require >=2.42",
     "linux-other": "Python source fallback; untested",
@@ -54,9 +54,10 @@
   ],
   "results": {
     "effect_count": 200,
-    "tool_count": 11,
+    "tool_count": 19,
     "external_projects_bundled": false,
-    "unit_tests": 56,
+    "unit_tests": 65,
     "installation_results": "results.json"
-  }
+  },
+  "terminal_title": "OSC0: tthings — function · section; Konsole also OSC30 %w, previous tab format restored at exit"
 }

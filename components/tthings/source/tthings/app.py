@@ -9,6 +9,7 @@ from .playback import AutoCycle,RepeatHold,canonical_key
 from .effects import Frame, Scene, PALETTES, FG, DIM
 from .settings import read,save
 from .terminal import Terminal
+from .titles import effect_caption
 
 def invocation():
     if getattr(sys,'frozen',False):return [sys.executable]
@@ -43,7 +44,7 @@ def play(term,name,palette=0,fps=20,duration=None):
         scene=Scene(name);started=time.monotonic();elapsed=0.;auto.reset(started)
     while True:
         tick=time.monotonic()
-        term.set_title(next(entry.title for entry in BUILTINS if entry.id==name))
+        term.set_title(effect_caption(name))
         t=elapsed if paused else tick-started
         if duration is not None and tick-session_started>=duration:return
         if hold.due(tick):auto.toggle(tick)
@@ -177,6 +178,9 @@ def run():
                     notice='Выделите область мышью; Esc отменяет' if key=='g' else 'Окно открыто: R случайно, P цвет, Esc закрыть'
                 except (ImportError,OSError) as exc:notice=f'Не удалось открыть окно: {exc}'
                 notice_until=tick+5
+            elif key=='r' and mode=='systems' and entries:
+                from .system_ui import run_tool
+                run_tool(term,random.choice(entries).id,palette=palette,random_pressed=True)
             elif key=='r' and mode!='systems':
                 choices=[e for e in entries if e.builtin] or BUILTINS
                 play(term,random.choice(choices).id,palette)

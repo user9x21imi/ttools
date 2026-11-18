@@ -23,7 +23,7 @@ class Screen:
     def getmaxyx(self):return self.h,self.w
     def addnstr(self,y,x,text,n,style):
         pair=style&255
-        palette={0:'#dce7ee',1:'#6bd6dd',2:'#58d6a1',3:'#ef6677',4:'#e8bd78',5:'#dce7ee',6:'#536b7c'}
+        palette={0:'#dce7ee',1:'#6bd6dd',2:'#58d6a1',3:'#ef6677',4:'#e8bd78',5:'#dce7ee',6:'#536b7c',7:'#af87ff'}
         for i,ch in enumerate(text[:n]):self.cells[(y,x+i)]=(ch,palette.get(pair,'#dce7ee'),'#0c1219',bool(style&(1<<20)))
     def refresh(self):pass
 
@@ -67,7 +67,7 @@ def effect_cards():
         frames.append(image)
     wall=Image.new('RGB',(1830,1110),'#080e14');draw=ImageDraw.Draw(wall)
     header=ImageFont.truetype('/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',37)
-    draw.text((30,21),'130 ways to make a terminal feel alive.',font=header,fill='#f2eaf3')
+    draw.text((30,21),'200 effects. 19 tools. One terminal.',font=header,fill='#f2eaf3')
     for j in range(min(9,len(ids))):wall.paste(card(j,15),(20+(j%3)*600,88+(j//3)*340))
     return frames,wall
 

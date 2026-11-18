@@ -3,9 +3,12 @@ import datetime as dt
 import time
 from .effects import Frame,PALETTES,DIM,FG
 from .dashboard import render_calendar,render_world_clocks,box,card
+from .system_utilities import IDS as UTILITY_IDS
 
 class SystemPreview:
     def __init__(self):
+        from .system_utilities import UtilitySuite
+        self.utilities=UtilitySuite()
         self.worker=None;self.fetch=None;self.history=[];self.stamp=None;self.started=time.monotonic()
     def close(self):
         if self.worker:self.worker.stop.set()
@@ -23,6 +26,7 @@ class SystemPreview:
                 self.history.append(sample['cpu'].get('cpu'));self.history=self.history[-120:];self.stamp=sample['timestamp']
             f,_=render_monitor('disk-space' if kind=='storage' else kind,sample,w,h,self.history,palette=palette)
             if kind=='storage':f.text(2,h-3,'Анализ папки запускается через Enter',DIM)
+        elif kind in UTILITY_IDS:f=self.utilities.render(kind,w,h,palette)
         elif kind=='calendar':f=render_calendar(w,h,today.year,today.month,today,palette=palette)
         elif kind=='timezones':f=render_world_clocks(w,h,palette=palette)
         elif kind=='system-info':

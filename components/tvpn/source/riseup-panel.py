@@ -187,7 +187,7 @@ def draw(screen, m, journal, ended, choosing=None, update=None):
                 pass
     color = 2 if m.state == 'connected' else 3 if m.state == 'error' else 4
     put(1,2,'●',color,True)
-    put(1,4,'tvpn',2,True)
+    put(1,4,'tvpn',7,True)
     put(1,13,'YOUR TUNNEL, LESS NOISE',5,dim=True)
     put(3, 2, '● ' + LABELS.get(m.state, m.state), color, True)
     put(4, 2, m.detail)
@@ -262,7 +262,7 @@ def draw(screen, m, journal, ended, choosing=None, update=None):
         for offset, line in enumerate(lines):
             put(top+offset, left, line.ljust(box_width)[:box_width],
                 6 if 2 <= offset < 8 and m.counts.get(REGION_KEYS[offset-2])==0 else 4 if offset==choosing+2 else 5, offset==choosing+2 or offset==0)
-    credit='by user9x21imi'
+    credit='ttools / TVPN'
     put(height-1,max(2,width-len(credit)-2),credit,6,dim=True)
     if update is not None:
         box_width=min(width-4,72)
@@ -329,7 +329,8 @@ def run(script, selected='amsterdam'):
         curses.use_default_colors()
         for i, c in enumerate([curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_RED,
                                curses.COLOR_YELLOW, curses.COLOR_WHITE, curses.COLOR_BLUE], 1):
-            curses.init_pair(i, c, curses.COLOR_BLACK)
+            curses.init_pair(i, c, -1)
+        curses.init_pair(7,141 if curses.COLORS>=256 else curses.COLOR_MAGENTA,-1)
         screen.bkgd(' ', curses.color_pair(5))
         screen.timeout(100)
         curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED | getattr(curses,'BUTTON4_PRESSED',0) | getattr(curses,'BUTTON5_PRESSED',0))

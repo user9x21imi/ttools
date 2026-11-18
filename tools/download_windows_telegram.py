@@ -27,4 +27,13 @@ def main():
         path=(destination/name).resolve()
         if not path.is_relative_to(destination.resolve()) or digest(path)!=expected:
             raise RuntimeError('Windows Telegram inventory mismatch: '+name)
+    apply_integration_fixes(destination,inventory)
+
+def apply_integration_fixes(destination,inventory):
+    # Apply the small, reviewed integration fixes after verifying the author's archive.
+    overrides=ROOT/'components/ttelegram/windows-native'
+    for name in ('source/windows_bootstrap.py','tests/test_core.py'):
+        shutil.copy2(overrides/name,destination/name)
+        inventory[name]=digest(destination/name)
+    (destination/'files.json').write_text(json.dumps(inventory,indent=2)+'\n')
 if __name__=='__main__':main()

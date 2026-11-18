@@ -167,6 +167,9 @@ SYSTEM_TOOLS = [
     Entry('journals', 'Журналы', 'Systems Things', 'Отдельная история производительности, сети и дисков', kind='tool'),
 ]
 
+from .system_utilities import TOOLS as UTILITY_TOOLS
+SYSTEM_TOOLS += [Entry(key,title,'Systems Things',description,kind='tool') for key,title,description in UTILITY_TOOLS]
+
 EXTERNAL = [
     ext('cbonsai', 'cbonsai', 'Природа', 'Оригинальный генератор бонсая', 'jakobrees/cbonsai', 'cbonsai', '-l'),
     ext('csakura', 'csakura', 'Природа', 'Оригинальная сакура', 'realstrawhat/csakura', 'csakura'),

@@ -21,3 +21,7 @@ No user venv, account configuration, credentials, message databases or logs are
 included. The public Riseup CA certificate is application data, not a private key.
 
 Нативный Windows preview ttelegram содержит отдельный fork python-telegram `2.0.0+ttnative.1`, TDLib 1.8.66 и Python embedded. Исходники fork и патча tg находятся в `components/ttelegram/windows-native/source/vendor/`, лицензии — в соседнем `licenses/`. Бинарная поставка и её происхождение описаны в HANDOFF.md и python-runtime-provenance.json. Linux-компонент не заменён.
+
+В составе tthings обновлён чистый авторский снимок 0.7.2 (200 эффектов / 19 инструментов). Сохранены адаптации ttools: адресная блокировка окон через TTOOLS_TTHINGS_PREFIX и UTF-8 вывода на Windows. Новый лаунчер использует стабильный MIT renderer API, не присваивает себе авторство исходных эффектов.
+
+В Windows-адаптере ttelegram добавлено отображение `_curses` на существующий VT backend: upstream `tg.views` импортирует тип window из `_curses` напрямую. Исходный архив по-прежнему проверяется по закреплённому SHA; затем применяются два явно перечисленных исправления из исходников репозитория и обновляется локальный файловый инвентарь. Второе исправление нормализует сравнение путей в тесте на Windows. Авторский архив не изменялся.
