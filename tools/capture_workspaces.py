@@ -2,6 +2,7 @@
 import os,subprocess,time,tempfile,json,shutil,sys
 from pathlib import Path
 from PIL import Image
+from editorial_assets import wallpaper as make_wallpaper
 from Xlib import display,X
 import argparse
 parser=argparse.ArgumentParser(description='Capture native Konsole windows in an invisible, isolated Xvfb desktop')
@@ -17,6 +18,10 @@ folder=Path(tempfile.mkdtemp(prefix='ttools-desktop-'))
 env=dict(os.environ,DISPLAY=':77',QT_QPA_PLATFORM='xcb',LIBGL_ALWAYS_SOFTWARE='1',TERM='xterm-256color',COLORTERM='truecolor')
 for name in ('XDG_CONFIG_HOME','XDG_CACHE_HOME','XDG_DATA_HOME','XDG_STATE_HOME','TSPOTIFY_CONFIG_DIR','TSPOTIFY_CACHE_DIR','TSPOTIFY_DATA_DIR'):
  env[name]=str(folder/name);Path(env[name]).mkdir()
+# Standard system palette only: no personal desktop configuration is copied.
+standard_dark=Path('/usr/share/color-schemes/BreezeDark.colors')
+if standard_dark.is_file():
+ (Path(env['XDG_CONFIG_HOME'])/'kdeglobals').write_text(standard_dark.read_text()+'\n[General]\nColorScheme=BreezeDark\n')
 profiles=Path(env['XDG_DATA_HOME'])/'konsole';profiles.mkdir()
 for name in ('ttools.profile','ttools.colorscheme'):shutil.copy2(ROOT/'konsole'/name,profiles/name)
 # One typeface and quiet palette across native terminal windows.
@@ -29,7 +34,7 @@ try:
  server=start([args.xvfb,':77','-ac','-nolisten','tcp','-screen','0','1920x1080x24']);time.sleep(2)
  wm=start(['kwin_x11','--replace','--no-kactivities']);time.sleep(3)
  connection=display.Display(':77');root=connection.screen().root
- wallpaper=Image.new('RGB',(1920,1080),'#deded4')
+ wallpaper=make_wallpaper('minimal',[(55,65,1010,650),(1090,100,780,560),(890,690,720,310)])
  pixmap=root.create_pixmap(1920,1080,24);gc=pixmap.create_gc()
  for yy in range(0,1080,20):
   strip=wallpaper.crop((0,yy,1920,min(1080,yy+20)))
@@ -38,7 +43,14 @@ try:
  for atom in ('_XROOTPMAP_ID','ESETROOT_PMAP_ID'):root.change_property(connection.intern_atom(atom),Xatom.PIXMAP,32,[pixmap.id])
  root.change_attributes(background_pixmap=pixmap);root.clear_area();connection.sync()
  wallpaper.save(folder/'wallpaper.png')
- wall=start([sys.executable,'-c',"import tkinter as t; r=t.Tk();r.geometry('1920x1080+0+0');r.attributes('-type','desktop');im=t.PhotoImage(file="+repr(str(folder/'wallpaper.png'))+");t.Label(r,image=im,borderwidth=0).pack();r.lower();r.mainloop()"]);time.sleep(1)
+ wall_code=folder/'wall.py'
+ wall_code.write_text("import tkinter as t\nfrom pathlib import Path\nr=t.Tk();r.geometry('1920x1080+0+0');r.attributes('-type','desktop')\np=Path("+repr(str(folder/'wallpaper.png'))+")\nim=None;stamp=None\nlabel=t.Label(r,borderwidth=0);label.pack()\ndef reload():\n global im,stamp\n current=p.stat().st_mtime_ns\n if current!=stamp:\n  im=t.PhotoImage(file=str(p));label.configure(image=im);stamp=current\n r.after(200,reload)\nreload();r.lower();r.mainloop()\n")
+ wall=start([sys.executable,wall_code]);time.sleep(1)
+ def backdrop(name,rectangles):
+  image=make_wallpaper(name,rectangles)
+  image.save(folder/'wallpaper-next.png')
+  os.replace(folder/'wallpaper-next.png',folder/'wallpaper.png')
+  time.sleep(.35)
  catalog=json.loads(((args.suite_prefix/'state.json')).read_text());release=Path(catalog['release']);apps=json.loads((release/'apps.local.json').read_text())['apps']
  # Installed commands are reused, with a fictional catalog and isolated settings.
  for a in apps:
@@ -51,8 +63,8 @@ try:
  env['TTOOLS_CONFIG_DIR']=str(folder/'launcher')
  # Core resolves its own XDG config; seed only the isolated source list.
  env['TTOOLS_CATALOG']=str(local)
- def terminal(title,command,x,y,w,h,extra=None):
-  p=start(['konsole','--separate','--profile','ttools','--hide-menubar','--hide-tabbar','--hide-toolbars','-p','LocalTabTitleFormat='+title,'-e',*command],extra)
+ def terminal(title,command,x,y,w,h,extra=None,font=11):
+  p=start(['konsole','--separate','--profile','ttools','--hide-menubar','--hide-tabbar','--hide-toolbars','-p','LocalTabTitleFormat='+title,'-p',f'Font=DejaVu Sans Mono,{font},-1,5,50,0,0,0,0,0','-e',*command],extra)
   for _ in range(40):
    out=subprocess.run(['xdotool','search','--all','--onlyvisible','--pid',str(p.pid),'--class','konsole'],env=env,capture_output=True,text=True).stdout.split()
    if out:break
@@ -98,18 +110,38 @@ try:
  def hide(*windows):
   for window in windows:subprocess.run(['xdotool','windowminimize',window],env=env)
  def save(name):time.sleep(1);capture().save(ASSETS/name)
- hide(launch);place(music,65,100,1130,810);place(things,1250,225,600,580);save('workspace-02-music.png')
- hide(music);place(launch,200,140,1500,770);hide(things);save('workspace-05-minimal.png')
+ backdrop('music',[(65,100,1130,810),(1250,225,600,580)]);hide(launch);place(music,65,100,1130,810);place(things,1250,225,600,580);save('workspace-02-music.png')
+ backdrop('minimal',[(200,140,1500,770)]);hide(music);place(launch,200,140,1500,770);hide(things);save('workspace-05-minimal.png')
  # Telegram is an isolated fixture; the real account and TDLib are never opened.
  Image.open(ASSETS/'ascii-gallery.png').resize((520,300)).save(folder/'poster.png')
  telegram=terminal('ttelegram',[release/'apps/ttelegram/current/venv/bin/python',ROOT/'tools/media_telegram_fixture.py'],1000,70,850,600,{'TTOOLS_MEDIA_DIR':str(folder),'TTELEGRAM_TEST_RUNTIME':str(ROOT/'components/ttelegram/source')})
  subprocess.run(['xdotool','windowactivate',telegram,'key','Return'],env=env);time.sleep(2)
- hide(launch);place(music,55,100,1000,810);place(telegram,1100,100,765,670);save('workspace-04-daily.png')
- vpn=terminal('TVPN',[sys.executable,ROOT/'tools/demo_vpn.py'],1050,655,810,360)
- hide(telegram);place(music,55,65,955,900);place(vpn,1055,65,810,900);save('workspace-01-collection.png')
- hide(music,telegram,vpn);place(things,55,160,850,650)
+ backdrop('daily',[(55,100,1000,810),(1100,100,765,670)]);hide(launch);place(music,55,100,1000,810);place(telegram,1100,100,765,670);save('workspace-04-daily.png')
+ vpn=terminal('TVPN',[sys.executable,ROOT/'tools/demo_vpn.py'],1055,610,810,400,font=8)
+ backdrop('collection',[(55,110,955,860),(1055,110,810,860)]);hide(telegram);place(music,55,110,955,860);place(vpn,1055,110,810,860);save('workspace-01-collection.png')
+ backdrop('gallery',[(55,160,850,650),(970,160,850,650)]);hide(music,telegram,vpn);place(things,55,160,850,650)
  rose=terminal('tthings / rose',[sys.executable,'-m','tthings','--effect','rose'],970,160,850,650,{'PYTHONPATH':str(ROOT/'components/tthings/source')});save('workspace-03-gallery.png')
- hide(rose);place(launch,70,80,1040,750);place(things,1170,360,680,610);save('workspace-06-experimental.png')
+ backdrop('experimental',[(70,80,1040,750),(1170,360,680,610)]);hide(rose);place(launch,70,80,1040,750);place(things,1170,360,680,610);save('workspace-06-experimental.png')
+ # Large, native individual interfaces for the README app sections.
+ hide(launch,things,music,telegram,vpn)
+ backdrop('music',[(85,95,1750,875)])
+ (folder/'solo-spotify').mkdir()
+ solo_env=dict(music_env,TSPOTIFY_INSTALL_PREFIX=str(folder/'solo-spotify'))
+ music_solo=terminal('tspotify',spotify['command'],85,95,1750,875,solo_env,font=14)
+ save('app-spotify.png')
+ subprocess.run(['xdotool','key','F3'],env=env);time.sleep(.5);save('app-spotify-player.png')
+ subprocess.run(['xdotool','key','F3'],env=env);hide(music_solo)
+ backdrop('daily',[(85,95,1750,875)])
+ hide(telegram)
+ telegram_solo=terminal('ttelegram',[release/'apps/ttelegram/current/venv/bin/python',ROOT/'tools/media_telegram_fixture.py'],85,95,1750,875,{'TTOOLS_MEDIA_DIR':str(folder),'TTELEGRAM_TEST_RUNTIME':str(ROOT/'components/ttelegram/source')},font=14)
+ subprocess.run(['xdotool','windowactivate',telegram_solo,'key','Return'],env=env);time.sleep(.5)
+ subprocess.run(['xdotool','type','--clearmodifiers','--delay','3','Оставляем этот вариант. Подберём музыку?'],env=env)
+ save('app-telegram.png');hide(telegram_solo)
+ backdrop('collection',[(85,95,1750,875)])
+ vpn_solo=terminal('TVPN / обзор карты',[sys.executable,ROOT/'tools/demo_vpn.py'],85,95,1750,875,font=14)
+ save('app-vpn.png');hide(vpn_solo)
+ backdrop('gallery',[(85,95,1750,875)])
+ place(things,85,95,1750,875);save('app-tthings.png')
  print('Native desktop captures saved. Logs:',folder,flush=True)
 finally:
  for p in reversed(children):

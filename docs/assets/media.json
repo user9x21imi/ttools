@@ -23,7 +23,7 @@
       ],
       "frames": 32,
       "duration_ms": 5120,
-      "bytes": 973872,
+      "bytes": 2049501,
       "kind": "native-desktop-capture"
     },
     {
@@ -142,5 +142,64 @@
     "theme": "terminal defaults; no profile switching",
     "preview_hold_seconds": 4,
     "normal_hold_seconds": 1.35
+  },
+  "app_screenshots": [
+    {
+      "file": "app-spotify-player.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 100135
+    },
+    {
+      "file": "app-spotify.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 118607
+    },
+    {
+      "file": "app-telegram.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 118111
+    },
+    {
+      "file": "app-tthings.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 79462
+    },
+    {
+      "file": "app-vpn.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 102842
+    }
+  ],
+  "editorial": {
+    "selected_studies": [
+      0,
+      2,
+      3,
+      4,
+      7
+    ],
+    "workspace_theme": "dark; system BreezeDark in isolated XDG only",
+    "art": "project renderer compositions, installed before capture",
+    "post_capture_window_compositing": false
   }
 }

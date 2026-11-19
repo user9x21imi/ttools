@@ -43,6 +43,15 @@ def message(cid):
     if cid==101:
         content={'@type':'messagePhoto','caption':{'text':'Новая палитра. Как тебе эти цвета?','entities':[]},'photo':{'sizes':[{'width':520,'height':300,'photo':picture_file()}]}}
     return {'@type':'message','id':1000+cid,'chat_id':cid,'date':int(time.time())-90,'sender_id':{'user_id':cid},'edit_date':0,'content':content}
+def history(cid):
+    if cid!=101:return [message(cid)]
+    now=int(time.time());items=[]
+    for index,value in enumerate(('Вечером соберём новый плейлист?', 'Да. И покажу тебе свежий эскиз.', None, 'Вот этот ритм и оставим.')):
+        item=message(cid)
+        item.update(id=2000+index,date=now-240+index*45,is_outgoing=index%2==1,sender_id={'user_id':999 if index%2 else 101})
+        if value is not None:item['content']={'@type':'messageText','text':{'text':value,'entities':[]}}
+        items.append(item)
+    return list(reversed(items))
 def chat(cid,order):
     return {'id':cid,'title':{101:'tTools / Design Lab',202:'Ночной плейлист'}[cid],'positions':[{'list':{'@type':'chatListMain'},'order':str(order)}],'type':{'@type':'chatTypePrivate'},'permissions':{'can_send_basic_messages':True},'last_read_inbox_message_id':9999,'last_read_outbox_message_id':9999,'last_message':message(cid),'is_marked_as_unread':False,'unread_count':0,'notification_settings':{'mute_for':0}}
 class TG:
@@ -54,7 +63,7 @@ class TG:
     def load_chats(self,**kwargs):return Result({'@type':'ok'})
     def get_chats(self,**kwargs):return Result({'chat_ids':[101,202]})
     def get_chat(self,cid):return Result(chat(cid,300 if cid==101 else 200))
-    def get_chat_history(self,cid,**kwargs):return Result({'messages':[] if kwargs.get('from_message_id') else [message(cid)]})
+    def get_chat_history(self,cid,**kwargs):return Result({'messages':[] if kwargs.get('from_message_id') else history(cid)})
     def get_me(self):return Result(user(999))
     def get_user(self,uid):return Result(user(uid))
     def add_update_handler(self,*args):pass
