@@ -8,7 +8,7 @@ Music, messages, a VPN and a little motion. **ttools** brings four terminal apps
 
 Pick an app, press Enter, get on with your day. Quiet generative forms leave room for the interface.
 
-![Music and focus workspace](docs/assets/workspace-02-music.png)
+![The collection in your terminal](docs/assets/workspace-05-minimal.png)
 
 ![Launcher navigation, app launch and return](docs/assets/desktop.gif)
 
@@ -43,7 +43,7 @@ ttools --no-motion
 
 Use `ttools --low-power` to limit background size and frame rate.
 
-Transparency comes from your terminal. Konsole can use the included translucent profile; the previous profile is restored on exit.
+Transparency comes from your terminal. The launcher keeps your current terminal profile, background and opacity.
 
 ## Install
 

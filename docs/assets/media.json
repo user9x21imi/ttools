@@ -23,7 +23,7 @@
       ],
       "frames": 32,
       "duration_ms": 5120,
-      "bytes": 1661002,
+      "bytes": 973872,
       "kind": "native-desktop-capture"
     },
     {
@@ -131,5 +131,16 @@
       ],
       "kind": "native-desktop-capture"
     }
-  ]
+  ],
+  "startup": {
+    "file": "startup-desktop.png",
+    "kind": "native-terminal-desktop-capture",
+    "size": [
+      1920,
+      1080
+    ],
+    "theme": "terminal defaults; no profile switching",
+    "preview_hold_seconds": 4,
+    "normal_hold_seconds": 1.35
+  }
 }

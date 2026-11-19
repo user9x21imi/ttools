@@ -43,9 +43,9 @@ class Background:
         available={entry['id'] for entry in api.available_effects()} if api else set(FALLBACK)
         self.pool=tuple(name for name in PREFERRED if name in available) or FALLBACK
         if effect is not None and effect not in available:raise ValueError('Unknown effect: '+effect)
-        self.effect=effect or self.random.choice(self.pool)
+        self.effect=effect or ('phyllotaxis' if 'phyllotaxis' in available else self.pool[0])
         self.scene=Scene(self.effect,seed=self.random.randrange(2**31))
-        self.secondary=self.random.choice([name for name in self.pool if name!=self.effect] or self.pool)
+        self.secondary=('rose' if effect is None and 'rose' in available else self.random.choice([name for name in self.pool if name!=self.effect] or self.pool))
         self.overlay=Scene(self.secondary,seed=self.random.randrange(2**31))
         self.wall=time.monotonic() if now is None else now
         self.logical=0.;self.started=0.;self.paused=not motion
@@ -75,14 +75,16 @@ class Background:
         if self.size!=(width,height):
             self.size=(width,height);self.cached=None;self.previous=None
         if self.cached is not None and self.logical-self.last_render<self.FRAME_INTERVAL:return self.cached
-        base=self.scene.render(width,height,self.logical-self.started+8.)
         frame=Frame(width,height)
+        # Match the approved poster: an open left half, two forms on the right.
+        primary_w=max(1,round(width*.45));primary_h=max(1,round(height*.78))
+        base=self.scene.render(primary_w,primary_h,self.logical-self.started+13.)
+        ox=width-primary_w;oy=max(0,round(height*.10))
         for y,row in enumerate(base.cells):
-            for x,(char,_) in enumerate(row):frame.cells[y][x]=(char,'#244ed7')
-        # A smaller second form keeps the composition asymmetric and leaves air.
-        small_w=max(1,width//2);small_h=max(1,height//2)
-        overlay=self.overlay.render(small_w,small_h,self.logical-self.started+11.)
-        ox=width-small_w;oy=max(0,height//12)
+            for x,(char,_) in enumerate(row):frame.cells[y+oy][x+ox]=(char,'#244ed7')
+        small_w=max(1,round(width*.25));small_h=max(1,round(height*.34))
+        overlay=self.overlay.render(small_w,small_h,self.logical-self.started+5.)
+        ox=width-small_w;oy=max(0,round(height*.15))
         for y,row in enumerate(overlay.cells):
             for x,(char,_) in enumerate(row):
                 if char!=' ':frame.cells[y+oy][x+ox]=(char,'#c96a98')

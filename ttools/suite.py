@@ -164,7 +164,7 @@ except (OSError,ValueError,RuntimeError) as error:
             for source in (root/'konsole').glob('*'):
                 shutil.copy2(source,konsole/source.name)
             desktop=Path.home()/'.local/share/applications/ttools.desktop';desktop.parent.mkdir(parents=True,exist_ok=True)
-            exe='konsole --separate --profile ttools -e "'+str(commands/'ttools')+'"' if shutil.which('konsole') else '"'+str(commands/'ttools')+'"'
+            exe='konsole --separate -e "'+str(commands/'ttools')+'"' if shutil.which('konsole') else '"'+str(commands/'ttools')+'"'
             desktop.write_text('[Desktop Entry]\nType=Application\nName=ttools\nExec='+exe+'\nTerminal='+('false' if shutil.which('konsole') else 'true')+'\nIcon=utilities-terminal\nCategories=Utility;\n',encoding='utf-8')
         elif sys.platform=='darwin':
             app=Path.home()/'Applications/ttools.command';app.parent.mkdir(exist_ok=True)

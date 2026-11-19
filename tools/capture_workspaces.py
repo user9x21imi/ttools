@@ -6,6 +6,8 @@ from Xlib import display,X
 import argparse
 parser=argparse.ArgumentParser(description='Capture native Konsole windows in an invisible, isolated Xvfb desktop')
 parser.add_argument('--suite-prefix',type=Path,required=True)
+parser.add_argument('--startup-preview',action='store_true')
+parser.add_argument('--launcher-preview',action='store_true')
 parser.add_argument('--xvfb',default=shutil.which('Xvfb'))
 args=parser.parse_args()
 if not args.xvfb:parser.error('Xvfb is required; no visible Xwayland fallback is used')
@@ -61,7 +63,13 @@ try:
   time.sleep(.4)
   subprocess.run(['xdotool','windowmove',window,str(x),str(y),'windowsize',window,str(w),str(h)],env=env,check=True)
   return window
- launch=terminal('ttools',[sys.executable,'-m','ttools','--no-splash','--background','light_bloom'],55,65,1010,650)
+ launch_command=([sys.executable,'-c',"import ttools.__main__ as app;app.SPLASH_DURATION=4;app.main()"] if args.startup_preview else [sys.executable,'-m','ttools','--no-splash'])
+ launch=terminal('ttools',launch_command,55,65,1810 if (args.startup_preview or args.launcher_preview) else 1010,930 if (args.startup_preview or args.launcher_preview) else 650)
+ if args.startup_preview or args.launcher_preview:
+  time.sleep(1.15)
+  shot=root.get_image(0,0,1920,1080,X.ZPixmap,0xffffffff)
+  Image.frombytes('RGB',(1920,1080),shot.data,'raw','BGRX').save(ASSETS/('startup-desktop.png' if args.startup_preview else 'workspace-05-minimal.png'))
+  raise SystemExit(0)
  spotify=next(a for a in apps if a['id']=='tspotify')
  music_env=dict(spotify['env'],TSPOTIFY_INSTALL_PREFIX=str(folder/'standalone-spotify'))
  (folder/'standalone-spotify').mkdir()

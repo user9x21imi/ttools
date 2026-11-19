@@ -1,8 +1,46 @@
 import unittest
-from unittest.mock import patch
+import time
+from ttools.visuals.effects import Frame
+from unittest.mock import patch,Mock
 from ttools.backgrounds import Background
 from ttools.__main__ import UI
 class BackgroundTests(unittest.TestCase):
+    def test_terminal_theme_is_not_replaced(self):
+        ui=UI.__new__(UI)
+        class Screen:
+            def bkgd(self,*args):pass
+        ui.s=Screen();pairs=[]
+        with patch('curses.start_color'),patch('curses.use_default_colors'),patch('curses.COLORS',256,create=True),patch('curses.init_pair',side_effect=lambda number,fg,bg:pairs.append((number,fg,bg))),patch('curses.color_pair',return_value=0):
+            ui.colors()
+        self.assertTrue(pairs)
+        self.assertTrue(all(bg==-1 for _,_,bg in pairs))
+        self.assertIn((1,-1,-1),pairs)
+
+    def test_artwork_right_of_menu_has_no_missing_horizontal_rows(self):
+        class Screen:
+            def getmaxyx(self):return (50,120)
+            def erase(self):pass
+            def refresh(self):pass
+            def addnstr(self,*args):pass
+        frame=Frame(118,50)
+        for y in range(30,41):frame.cells[y][90]=('X','#244ed7')
+        class BackgroundFixture:
+            effect='phyllotaxis';secondary='rose';paused=False
+            def render(self,*args):return frame
+        ui=UI.__new__(UI);ui.s=Screen();ui.apps=[];ui.errors=[]
+        ui.selected=0;ui.query='';ui.searching=False;ui.status='';ui.updates={};ui.jobs={}
+        ui.last_check=time.monotonic();ui.started=0;ui.splash=False;ui.background=BackgroundFixture()
+        with patch('curses.color_pair',side_effect=lambda n:n):ui.draw()
+        for y in range(30,41):self.assertEqual(ui._pending[(y,91)][0],'X')
+
+    def test_enter_dismisses_splash_without_launching_app(self):
+        ui=UI.__new__(UI);ui.s=Mock();ui.s.get_wch.side_effect=['\n','q']
+        ui.draw=Mock();ui.pool=Mock();ui.launch=Mock()
+        ui.splash=True;ui.started=time.monotonic();ui.searching=False
+        ui.run()
+        self.assertFalse(ui.splash)
+        ui.launch.assert_not_called()
+
     def test_pause_preserves_frame_and_resume_advances_time(self):
         bg=Background(seed=4,now=0)
         frame=bg.render(80,24,1)
