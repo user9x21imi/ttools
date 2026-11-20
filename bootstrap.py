@@ -8,6 +8,7 @@ from pathlib import Path, PurePosixPath
 import platform
 import shutil
 import stat
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -18,10 +19,28 @@ import zipfile
 
 REPO='user9x21imi/ttools'
 
+MACOS_CA_BUNDLE = '/etc/ssl/cert.pem'
+
+def https_context():
+    """Keep TLS validation enabled and add macOS system roots when appropriate.
+
+    python.org builds can have an empty OpenSSL store until the separate
+    certificate-install step is run. Explicit CA overrides remain authoritative.
+    This small helper is also present in the standalone bootstrap, which must
+    work before the ttools package has been downloaded.
+    """
+    context=ssl.create_default_context()
+    if (platform.system()=='Darwin'
+            and not any(os.environ.get(key) for key in ('SSL_CERT_FILE','SSL_CERT_DIR'))
+            and Path(MACOS_CA_BUNDLE).is_file()):
+        context.load_verify_locations(cafile=MACOS_CA_BUNDLE)
+    return context
+
+
 def read(url,limit):
     if urllib.parse.urlsplit(url).scheme!='https':raise ValueError('HTTPS required')
     request=urllib.request.Request(url,headers={'User-Agent':'ttools-bootstrap/1'})
-    with urllib.request.urlopen(request,timeout=30) as response:
+    with urllib.request.urlopen(request,timeout=30,context=https_context()) as response:
         if urllib.parse.urlsplit(response.geturl()).scheme!='https':raise ValueError('HTTPS redirect required')
         data=response.read(limit+1)
         if len(data)>limit:raise ValueError('Download too large')

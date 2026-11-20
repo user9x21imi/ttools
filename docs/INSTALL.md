@@ -108,3 +108,15 @@ python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcu
 `--background light_bloom` выбирает основную сцену; меньшая вторая сцена подбирается случайно. N меняет сочетание, Space ставит движение на паузу. `--no-motion` запускает неподвижный фон, `--low-power` ограничивает размер до 96×32 и частоту до 4 кадров/с. Выбор через CLI действует на этот запуск; постоянного файла настроек анимации пока нет.
 
 Прозрачность сохраняет стандартный фон терминала. Профиль Konsole и других терминалов не переключается; фон и прозрачность остаются такими, как их настроил пользователь. Дополнительные графические окна для работы лаунчера не создаются.
+
+## macOS: CERTIFICATE_VERIFY_FAILED
+
+Если curl скачал скрипт, но Python сообщил `unable to get local issuer certificate`, у этого Python может отсутствовать собственный набор CA. Кандидат установщика и загрузчик обновлений дополнительно используют системный `/etc/ssl/cert.pem` на macOS. Проверка сертификата и имени хоста остаётся включённой; явные пользовательские SSL_CERT_FILE / SSL_CERT_DIR не заменяются. Системные файлы и настройки Python не изменяются.
+
+Для уже опубликованного установщика можно указать системный набор на один запуск:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | SSL_CERT_FILE=/etc/ssl/cert.pem sh -s -- --preview --allow-partial
+```
+
+Это не отключает SSL-проверку. Если системного PEM нет или его CA не подходят вашей сети, для Python с python.org предусмотрен штатный `Install Certificates.command` в `/Applications/Python 3.x/`: [документация Python](https://docs.python.org/3.14/using/mac.html). Не используйте `curl -k`, CERT_NONE или глобальное отключение проверки HTTPS.
