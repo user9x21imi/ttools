@@ -109,7 +109,7 @@ curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh 
 **macOS — Apple Silicon / Intel, without Telegram**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | sh -s -- --preview --allow-partial
+curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | SSL_CERT_FILE=/etc/ssl/cert.pem sh -s -- --preview --allow-partial
 ```
 
 Open a new terminal and run `ttools`. Initial setup downloads shared dependencies. App logins happen afterwards.

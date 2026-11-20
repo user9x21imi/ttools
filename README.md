@@ -124,7 +124,7 @@ curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh 
 **macOS · Apple Silicon / Intel, без Telegram**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | sh -s -- --preview --allow-partial
+curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | SSL_CERT_FILE=/etc/ssl/cert.pem sh -s -- --preview --allow-partial
 ```
 
 Открой новый терминал и выполни `ttools`.
