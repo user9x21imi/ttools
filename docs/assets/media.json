@@ -1,38 +1,205 @@
 {
-  "source": "Offline application demos, fictional Telegram backend, real renderer APIs",
+  "source": "Native Xvfb/KWin/Konsole demo captures, offline VT renders and original ASCII compositions",
   "account_data": false,
   "vpn_connected": false,
   "audio_played": false,
   "gifs": [
     {
       "file": "demo.gif",
+      "size": [
+        960,
+        592
+      ],
       "frames": 24,
       "duration_ms": 4320,
-      "bytes": 1007306
+      "bytes": 348780,
+      "kind": "renderer"
+    },
+    {
+      "file": "desktop.gif",
+      "size": [
+        960,
+        540
+      ],
+      "frames": 32,
+      "duration_ms": 5120,
+      "bytes": 2049501,
+      "kind": "native-desktop-capture"
     },
     {
       "file": "spotify.gif",
+      "size": [
+        1040,
+        621
+      ],
       "frames": 11,
       "duration_ms": 5800,
-      "bytes": 941008
+      "bytes": 941008,
+      "kind": "renderer"
     },
     {
       "file": "telegram.gif",
+      "size": [
+        1040,
+        621
+      ],
       "frames": 11,
       "duration_ms": 8000,
-      "bytes": 635868
+      "bytes": 635868,
+      "kind": "renderer"
     },
     {
       "file": "vpn.gif",
+      "size": [
+        1040,
+        670
+      ],
       "frames": 27,
       "duration_ms": 6400,
-      "bytes": 972922
+      "bytes": 972922,
+      "kind": "renderer"
     },
     {
       "file": "tthings.gif",
+      "size": [
+        1040,
+        641
+      ],
       "frames": 30,
       "duration_ms": 6000,
-      "bytes": 3137745
+      "bytes": 3137745,
+      "kind": "renderer"
+    },
+    {
+      "file": "ascii-gallery.gif",
+      "size": [
+        960,
+        540
+      ],
+      "frames": 28,
+      "duration_ms": 4200,
+      "bytes": 1458119,
+      "kind": "renderer"
     }
-  ]
+  ],
+  "workspaces": [
+    {
+      "file": "workspace-01-collection.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    },
+    {
+      "file": "workspace-02-music.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    },
+    {
+      "file": "workspace-03-gallery.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    },
+    {
+      "file": "workspace-04-daily.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    },
+    {
+      "file": "workspace-05-minimal.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    },
+    {
+      "file": "workspace-06-experimental.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture"
+    }
+  ],
+  "startup": {
+    "file": "startup-desktop.png",
+    "kind": "native-terminal-desktop-capture",
+    "size": [
+      1920,
+      1080
+    ],
+    "theme": "terminal defaults; no profile switching",
+    "preview_hold_seconds": 4,
+    "normal_hold_seconds": 1.35
+  },
+  "app_screenshots": [
+    {
+      "file": "app-spotify-player.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 100135
+    },
+    {
+      "file": "app-spotify.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 118607
+    },
+    {
+      "file": "app-telegram.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 118111
+    },
+    {
+      "file": "app-tthings.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 79462
+    },
+    {
+      "file": "app-vpn.png",
+      "size": [
+        1920,
+        1080
+      ],
+      "kind": "native-desktop-capture",
+      "bytes": 102842
+    }
+  ],
+  "editorial": {
+    "selected_studies": [
+      0,
+      2,
+      3,
+      4,
+      7
+    ],
+    "workspace_theme": "dark; system BreezeDark in isolated XDG only",
+    "art": "project renderer compositions, installed before capture",
+    "post_capture_window_compositing": false
+  }
 }

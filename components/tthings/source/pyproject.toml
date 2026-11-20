@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tthings"
-version = "0.7.0"
+version = "0.7.2"
 description = "Portable terminal animation launcher"
 requires-python = ">=3.10"
 dependencies = ["psutil>=7.0; sys_platform != 'linux'", "tzdata>=2025.2; sys_platform == 'win32'"]

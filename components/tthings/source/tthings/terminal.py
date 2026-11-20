@@ -16,6 +16,8 @@ class Terminal:
         self.decoder=codecs.getincrementaldecoder('utf-8')('replace')
         self.win_modes=[]
         self.current_title=None
+        from .konsole_title import is_konsole
+        self.konsole=is_konsole();self.previous_tab_format=None
 
     def __enter__(self):
         self.start()
@@ -41,6 +43,9 @@ class Terminal:
             self.old=termios.tcgetattr(sys.stdin.fileno())
             tty.setcbreak(sys.stdin.fileno())
         self.active=True
+        if self.konsole:
+            from .konsole_title import previous_tab_format
+            self.previous_tab_format=previous_tab_format()
         self.write(ESC+'[22;0t')
         self.current_title=None
         self.set_title()
@@ -48,6 +53,10 @@ class Terminal:
 
     def stop(self):
         if not self.active:return
+        if self.konsole and self.previous_tab_format is not None:
+            restored=''.join(c if c.isprintable() else ' ' for c in self.previous_tab_format)[:512]
+            self.write(ESC+']30;'+restored+'\x07')
+            self.previous_tab_format=None
         self.write(ESC+'[0m'+ESC+'[?25h'+ESC+'[?1049l'+ESC+'[23;0t')
         self.current_title=None
         if os.name=='nt':
@@ -70,7 +79,7 @@ class Terminal:
         label='tthings'+(' — '+function if function else '')
         label=''.join(char if char.isprintable() else ' ' for char in label)[:160]
         if label!=self.current_title:
-            self.write(ESC+']0;'+label+'\x07')
+            self.write(ESC+']0;'+label+'\x07'+(ESC+']30;%w\x07' if self.konsole else ''))
             self.current_title=label
 
     @staticmethod

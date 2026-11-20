@@ -5,6 +5,11 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a new release (requires author approval)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -26,6 +31,9 @@ jobs:
         run: python -m pip install -e .
       - name: Unit and terminal integration tests
         run: python -m unittest discover -s tests -v
+      - name: Check macOS system certificates with empty Python trust store
+        if: runner.os == 'macOS'
+        run: python tests/smoke_macos_tls.py
       - name: Verify source Spotify dependencies without account or audio
         run: |
           python -m pip install ./components/tspotify/source
@@ -68,7 +76,7 @@ jobs:
           name: ttools-release
           path: dist/*
   publish:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
     needs: package
     runs-on: ubuntu-24.04
     permissions:

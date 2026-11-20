@@ -6,6 +6,9 @@ def install(native_td=True,configure_paths=True):
     os.environ['TTELEGRAM_VT']='1';os.environ.pop('TMUX',None);os.environ.pop('TMUX_PANE',None)
     import vtcurses
     sys.modules['curses']=vtcurses
+    # Upstream views import window directly from the extension module.
+    # Both imports must resolve to the same VT adapter on native Windows.
+    sys.modules['_curses']=vtcurses
     if native_td:
         from native_tdjson import TDJson
         import telegram.tdjson,telegram.client

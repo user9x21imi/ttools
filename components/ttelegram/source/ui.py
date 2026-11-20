@@ -4,7 +4,7 @@ from pathlib import Path
 from runtime import ROOT,SOCKET,command,tmux_config
 CFG = Path.home()/'.config/ttelegram/layout.json'
 
-PALETTES = [('NEON', '#67e8f9', '#c4b5fd'), ('AMBER', '#fbbf24', '#fb923c'), ('MINT', '#6ee7b7', '#93c5fd')]
+PALETTES = [('BLUE', '#53aeef', '#94a3b8'), ('AMBER', '#fbbf24', '#fb923c'), ('MINT', '#6ee7b7', '#93c5fd')]
 def tm(*args, check=True):
     return subprocess.run(['tmux','-L',SOCKET,*args], check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 def state():

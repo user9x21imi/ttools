@@ -8,7 +8,7 @@ Telegram использует прежнюю базу авторизации: д
 |---|---|---|
 | Linux x86_64 / SteamOS | Все четыре приложения + ttools | Комплектный локальный runtime Spotify рассчитан на glibc 2.43; для других систем предусмотрена установка Spotify из исходников |
 | macOS ARM64 / x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
-| Windows x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
+| Windows x86_64 | Опубликованы ttools, Spotify, TVPN, tthings; кандидат добавляет ttelegram | Native Telegram предварительный; ручной smoke, звук и туннель не подтверждены |
 
 Linux Telegram: CPython 3.14, glibc >=2.28, tmux >=3.4, ffmpeg/ffprobe с
 libopus/PulseAudio, ffplay, kdialog, pactl, системный `/usr/bin/python3` с
@@ -32,8 +32,7 @@ read-only root не отключается. В Debian/Ubuntu bootstrap може�
 ## Локальный архив без GitHub
 
 Распакуйте ZIP своей ОС. `Install-ttools.sh` / `Install-ttools.command` /
-`Install-ttools.cmd` готовит CPython 3.14 и вызывает install-only. На macOS/Windows
-эти preview-обёртки устанавливают явно неполный комплект без Telegram.
+`Install-ttools.cmd` готовит CPython 3.14 и вызывает install-only. В опубликованном 1.1.0-preview.1 macOS/Windows устанавливают неполный комплект без Telegram. Эта ветка добавляет нативный Windows Telegram в следующий кандидат; macOS остаётся без Telegram.
 
 Если CPython 3.14 уже готов, откройте терминал в папке `ttools`:
 
@@ -103,3 +102,21 @@ python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcu
 Установку выполняет встроенный Python, приложение запускается внутри терминала лаунчера. ttools доставляет новые версии в составе проверенного комплекта; перед переключением Telegram получает адресный запрос на штатное завершение. Данные сохраняются отдельно в `%LOCALAPPDATA%\ttools\ttelegram-data`. Для запуска тестового интерфейса без аккаунта предусмотрен `--demo`.
 
 [Контракт интеграции и Windows smoke test](../components/ttelegram/windows-native/HANDOFF.md). Исходники входят в репозиторий; офлайн-зависимости — в отдельный архив с закреплённым SHA-256, который проверяется при сборке.
+
+## Фоны лаунчера в кандидате
+
+`--background light_bloom` выбирает основную сцену; меньшая вторая сцена подбирается случайно. N меняет сочетание, Space ставит движение на паузу. `--no-motion` запускает неподвижный фон, `--low-power` ограничивает размер до 96×32 и частоту до 4 кадров/с. Выбор через CLI действует на этот запуск; постоянного файла настроек анимации пока нет.
+
+Прозрачность сохраняет стандартный фон терминала. Профиль Konsole и других терминалов не переключается; фон и прозрачность остаются такими, как их настроил пользователь. Дополнительные графические окна для работы лаунчера не создаются.
+
+## macOS: CERTIFICATE_VERIFY_FAILED
+
+Если curl скачал скрипт, но Python сообщил `unable to get local issuer certificate`, у этого Python может отсутствовать собственный набор CA. Кандидат установщика и загрузчик обновлений дополнительно используют системный `/etc/ssl/cert.pem` на macOS. Проверка сертификата и имени хоста остаётся включённой; явные пользовательские SSL_CERT_FILE / SSL_CERT_DIR не заменяются. Системные файлы и настройки Python не изменяются.
+
+Для уже опубликованного установщика можно указать системный набор на один запуск:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/user9x21imi/ttools/main/install.sh | SSL_CERT_FILE=/etc/ssl/cert.pem sh -s -- --preview --allow-partial
+```
+
+Это не отключает SSL-проверку. Если системного PEM нет или его CA не подходят вашей сети, для Python с python.org предусмотрен штатный `Install Certificates.command` в `/Applications/Python 3.x/`: [документация Python](https://docs.python.org/3.14/using/mac.html). Не используйте `curl -k`, CERT_NONE или глобальное отключение проверки HTTPS.

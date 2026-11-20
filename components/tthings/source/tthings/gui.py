@@ -5,6 +5,7 @@ import time
 from .catalog import BUILTINS
 from .effects import BG, FG, Scene
 from .playback import AutoCycle,canonical_key
+from .titles import effect_caption
 
 def show(effect=None,region=False,geometry=None,close_after=None,snap=False):
     desktop_rect = None
@@ -35,7 +36,7 @@ def show(effect=None,region=False,geometry=None,close_after=None,snap=False):
         for widget in root.winfo_children():widget.destroy()
         root.unbind('<Escape>')
         name=effect or random.choice(BUILTINS).id
-        root.title('tthings · '+next(e.title for e in BUILTINS if e.id==name))
+        root.title('tthings — '+effect_caption(name))
         if rect:
             x,y,w,h=rect
             root.geometry(f'{max(80,w)}x{max(60,h)}{x:+d}{y:+d}')
@@ -156,7 +157,7 @@ def show(effect=None,region=False,geometry=None,close_after=None,snap=False):
             record_geometry()
             now=time.monotonic()
             if auto.due(now,state['paused']):change()
-            title='tthings · '+next(entry.title for entry in BUILTINS if entry.id==state['scene'].name)
+            title='tthings — '+effect_caption(state['scene'].name)
             if auto.enabled:title+=f' · авто {auto.remaining(now)}с'
             if title!=state['title']:
                 root.title(title);auto_button.configure(text=f'Авто: {auto.remaining(now)}с' if auto.enabled else 'Авто: выкл');state['title']=title

@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import platform
 import re
 import stat
+import ssl
 import sys
 import tempfile
 import urllib.parse
@@ -15,6 +16,24 @@ import zipfile
 
 REPOSITORY = 'user9x21imi/ttools'
 MAX_ARCHIVE = 700 * 1024 * 1024
+
+MACOS_CA_BUNDLE = '/etc/ssl/cert.pem'
+
+def https_context():
+    """Keep TLS validation enabled and add macOS system roots when appropriate.
+
+    python.org builds can have an empty OpenSSL store until the separate
+    certificate-install step is run. Explicit CA overrides remain authoritative.
+    This small helper is also present in the standalone bootstrap, which must
+    work before the ttools package has been downloaded.
+    """
+    context=ssl.create_default_context()
+    if (platform.system()=='Darwin'
+            and not any(os.environ.get(key) for key in ('SSL_CERT_FILE','SSL_CERT_DIR'))
+            and Path(MACOS_CA_BUNDLE).is_file()):
+        context.load_verify_locations(cafile=MACOS_CA_BUNDLE)
+    return context
+
 
 def configure_text_io():
     if os.name=='nt':
@@ -98,7 +117,7 @@ def fetch(url,target,limit=MAX_ARCHIVE):
     if urllib.parse.urlsplit(url).scheme != 'https':
         raise ValueError('Downloads require HTTPS')
     request=urllib.request.Request(url,headers={'User-Agent':'ttools/1.1','Accept':'application/vnd.github+json' if 'api.github.com' in url else '*/*'})
-    with urllib.request.urlopen(request,timeout=15) as response, Path(target).open('wb') as output:
+    with urllib.request.urlopen(request,timeout=15,context=https_context()) as response, Path(target).open('wb') as output:
         if urllib.parse.urlsplit(response.geturl()).scheme != 'https':
             raise ValueError('Insecure download redirect')
         total=0

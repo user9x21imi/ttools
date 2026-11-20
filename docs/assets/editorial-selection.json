@@ -1,0 +1,90 @@
+{
+  "studies": [
+    0,
+    2,
+    3,
+    4,
+    7
+  ],
+  "purpose": {
+    "0": "hero / light_bloom + rose",
+    "2": "messages / iris_filaments + porcelain",
+    "3": "network / lissajous + nautilus_shell",
+    "4": "music / truchet_tiles + dune_contours",
+    "7": "botanics / flowers + fern"
+  },
+  "wallpapers": {
+    "collection": {
+      "effects": [
+        "lissajous",
+        "nautilus_shell"
+      ],
+      "palette": [
+        "#101319",
+        "#e4e7ee",
+        "#506ccc",
+        "#bd8ba9"
+      ]
+    },
+    "music": {
+      "effects": [
+        "truchet_tiles",
+        "dune_contours"
+      ],
+      "palette": [
+        "#10181c",
+        "#e0e8e5",
+        "#517b9a",
+        "#8db4a8"
+      ]
+    },
+    "daily": {
+      "effects": [
+        "iris_filaments",
+        "porcelain"
+      ],
+      "palette": [
+        "#101725",
+        "#e5e9f2",
+        "#5277bb",
+        "#b58ea6"
+      ]
+    },
+    "gallery": {
+      "effects": [
+        "flowers",
+        "fern"
+      ],
+      "palette": [
+        "#181321",
+        "#e9e2ed",
+        "#8c77b1",
+        "#c58ba6"
+      ]
+    },
+    "minimal": {
+      "effects": [
+        "phyllotaxis",
+        "rose"
+      ],
+      "palette": [
+        "#11151d",
+        "#e6e8ee",
+        "#536cbd",
+        "#b0829a"
+      ]
+    },
+    "experimental": {
+      "effects": [
+        "light_bloom",
+        "rose"
+      ],
+      "palette": [
+        "#152258",
+        "#e8ebfa",
+        "#6881dd",
+        "#ce8caf"
+      ]
+    }
+  }
+}

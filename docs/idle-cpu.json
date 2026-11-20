@@ -1,0 +1,38 @@
+{
+  "method": "Linux /proc process CPU after 1s warmup, 3s samples, real PTY loop, four synthetic catalog entries; one sample per mode, background secondary random",
+  "results": [
+    {
+      "mode": [
+        "default"
+      ],
+      "one_core_cpu_percent": 10.9,
+      "wall_seconds": 3.02,
+      "terminal": [
+        120,
+        40
+      ]
+    },
+    {
+      "mode": [
+        "--low-power"
+      ],
+      "one_core_cpu_percent": 7.6,
+      "wall_seconds": 3.04,
+      "terminal": [
+        120,
+        40
+      ]
+    },
+    {
+      "mode": [
+        "--no-motion"
+      ],
+      "one_core_cpu_percent": 2.3,
+      "wall_seconds": 3.01,
+      "terminal": [
+        120,
+        40
+      ]
+    }
+  ]
+}

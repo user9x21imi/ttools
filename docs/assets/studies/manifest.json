@@ -1,0 +1,266 @@
+{
+  "seed": 181126,
+  "original": "mix-00.png",
+  "palettes": [
+    [
+      "paper/cobalt/rose",
+      "#efede6",
+      "#242429",
+      "#244ed7",
+      "#c96a98"
+    ],
+    [
+      "ink/lilac/ice",
+      "#17191f",
+      "#ede9df",
+      "#b5a0d8",
+      "#7a9fb5"
+    ],
+    [
+      "cream/graphite/acid",
+      "#e8e5da",
+      "#26282b",
+      "#777776",
+      "#a34878"
+    ],
+    [
+      "cobalt/paper/pink",
+      "#2444bd",
+      "#f4f0df",
+      "#d4d7e2",
+      "#e19aba"
+    ],
+    [
+      "rose/ink/plum",
+      "#ead5da",
+      "#29242d",
+      "#464053",
+      "#995571"
+    ],
+    [
+      "chalk/black",
+      "#efefea",
+      "#232323",
+      "#535353",
+      "#92928b"
+    ]
+  ],
+  "variants": [
+    {
+      "id": 1,
+      "effects": [
+        "butterfly_curve",
+        "porcelain"
+      ],
+      "palette": 0,
+      "layout": 0
+    },
+    {
+      "id": 2,
+      "effects": [
+        "iris_filaments",
+        "porcelain"
+      ],
+      "palette": 1,
+      "layout": 0
+    },
+    {
+      "id": 3,
+      "effects": [
+        "lissajous",
+        "nautilus_shell"
+      ],
+      "palette": 2,
+      "layout": 0
+    },
+    {
+      "id": 4,
+      "effects": [
+        "truchet_tiles",
+        "dune_contours"
+      ],
+      "palette": 3,
+      "layout": 0
+    },
+    {
+      "id": 5,
+      "effects": [
+        "phyllotaxis",
+        "lissajous"
+      ],
+      "palette": 4,
+      "layout": 0
+    },
+    {
+      "id": 6,
+      "effects": [
+        "flowers",
+        "fern"
+      ],
+      "palette": 5,
+      "layout": 0
+    },
+    {
+      "id": 7,
+      "effects": [
+        "flowers",
+        "fern"
+      ],
+      "palette": 0,
+      "layout": 1
+    },
+    {
+      "id": 8,
+      "effects": [
+        "dune_contours",
+        "iris_filaments"
+      ],
+      "palette": 1,
+      "layout": 1
+    },
+    {
+      "id": 9,
+      "effects": [
+        "hopf_fibers",
+        "flowers"
+      ],
+      "palette": 2,
+      "layout": 1
+    },
+    {
+      "id": 10,
+      "effects": [
+        "phyllotaxis",
+        "harmonograph"
+      ],
+      "palette": 3,
+      "layout": 1
+    },
+    {
+      "id": 11,
+      "effects": [
+        "lissajous",
+        "moire_spokes"
+      ],
+      "palette": 4,
+      "layout": 1
+    },
+    {
+      "id": 12,
+      "effects": [
+        "fern",
+        "rose"
+      ],
+      "palette": 5,
+      "layout": 1
+    },
+    {
+      "id": 13,
+      "effects": [
+        "lissajous",
+        "harmonograph"
+      ],
+      "palette": 0,
+      "layout": 2
+    },
+    {
+      "id": 14,
+      "effects": [
+        "porcelain",
+        "truchet_tiles"
+      ],
+      "palette": 1,
+      "layout": 2
+    },
+    {
+      "id": 15,
+      "effects": [
+        "light_ribbons",
+        "dune_contours"
+      ],
+      "palette": 2,
+      "layout": 2
+    },
+    {
+      "id": 16,
+      "effects": [
+        "nautilus_shell",
+        "light_silk"
+      ],
+      "palette": 3,
+      "layout": 2
+    },
+    {
+      "id": 17,
+      "effects": [
+        "harmonograph",
+        "nautilus_shell"
+      ],
+      "palette": 4,
+      "layout": 2
+    },
+    {
+      "id": 18,
+      "effects": [
+        "klein",
+        "moire_spokes"
+      ],
+      "palette": 5,
+      "layout": 2
+    },
+    {
+      "id": 19,
+      "effects": [
+        "light_bloom",
+        "catenoid_surface"
+      ],
+      "palette": 0,
+      "layout": 0
+    },
+    {
+      "id": 20,
+      "effects": [
+        "dune_contours",
+        "harmonograph"
+      ],
+      "palette": 1,
+      "layout": 0
+    },
+    {
+      "id": 21,
+      "effects": [
+        "phyllotaxis",
+        "moire_spokes"
+      ],
+      "palette": 2,
+      "layout": 0
+    },
+    {
+      "id": 22,
+      "effects": [
+        "iris_filaments",
+        "seashell_fan"
+      ],
+      "palette": 3,
+      "layout": 0
+    },
+    {
+      "id": 23,
+      "effects": [
+        "spherical_spiral",
+        "seashell_fan"
+      ],
+      "palette": 4,
+      "layout": 0
+    },
+    {
+      "id": 24,
+      "effects": [
+        "porcelain",
+        "nautilus_shell"
+      ],
+      "palette": 5,
+      "layout": 0
+    }
+  ]
+}

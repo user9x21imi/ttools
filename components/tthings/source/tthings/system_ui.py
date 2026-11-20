@@ -15,8 +15,18 @@ from .storage import StorageScan
 from .typography import big_text,metric_hero,STYLES,STYLE_LABELS
 
 TITLES={'performance':'Производительность','network':'Состояние сети','disk-io':'Нагрузка дисков','disk-space':'Место на дисках','storage':'Что занимает место','processes':'Процессы','calendar':'Календарь','system-info':'О системе','sensors':'Датчики и батарея','stopwatch':'Секундомер','timezones':'Мировые часы','journals':'Журналы'}
+from .system_utilities import TOOLS as UTILITY_TOOLS
+TITLES.update({key:title for key,title,description in UTILITY_TOOLS})
 MONITORS={'performance','network','disk-io','disk-space','processes','sensors'}
 MONTHS=['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь']
+
+def font_control(kind,width,height):
+    if kind=='system-info' and width>=60 and height>=24:return 'вид логотипа'
+    if kind=='calendar' and width>=85 and height>=30:return 'шрифт даты'
+    if kind in {'performance','network','disk-io','disk-space','sensors','timezones','epoch','countdown','pomodoro'} and width>=60 and height>=26:return 'шрифт цифр'
+    if kind=='stopwatch' and width>=30 and height>=20:return 'шрифт цифр'
+    return None
+
 
 def human(value):
     if value is None:return '—'
@@ -171,10 +181,16 @@ def _legacy_render_monitor(kind,sample,width,height,history=(),scroll=0,palette=
     return f,len(lines)
 
 
-def show(term,kind,palette=0,path=None,duration_limit=None):
+def show(term,kind,palette=0,path=None,duration_limit=None,playback=None):
     from .catalog import SYSTEM_TOOLS
     ids=[e.id for e in SYSTEM_TOOLS]
-    term.set_title(TITLES[kind])
+    from .system_playback import SystemPlayback
+    from .system_utilities import IDS as UTILITY_IDS
+    playback=playback or SystemPlayback()
+    if playback.palette is None:playback.palette=palette
+    else:palette=playback.palette
+    from .titles import system_caption
+    term.set_title(system_caption(TITLES[kind]))
     scroll=0;traces={};history=deque(maxlen=120);worker=None;scan=None;sample=None;error=None;last_stamp=None
     recording=kind in KINDS;journal=Journal(kind) if recording else None;record_error=''
     today=dt.date.today();year,month=today.year,today.month;year_view=False
@@ -185,7 +201,7 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
     prefs=read().get('tool_styles',{});prefs=prefs if isinstance(prefs,dict) else {}
     stored=prefs.get(kind,{});stored=stored if isinstance(stored,dict) else {}
     font_index=stored.get('font',default_styles.get(kind,0));font_index=font_index if isinstance(font_index,int) and 0<=font_index<len(STYLES) else default_styles.get(kind,0)
-    font_size=stored.get('size',0);font_size=font_size if isinstance(font_size,int) and -1<=font_size<=2 else 0
+    font_size=0  # Numeric glyph size now follows available space automatically.
     fetch=None;logo3d=None;fetch_current=None
     if kind=='system-info':
         from .system_fetch import SystemData
@@ -195,7 +211,9 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
     try:
         while True:
             now=time.monotonic()
-            if duration_limit is not None and now-started>=duration_limit:return
+            if duration_limit is not None and now-playback.started>=duration_limit:return
+            next_tool=playback.poll(kind,ids,now)
+            if next_tool:return next_tool
             w,h=term.size();p=PALETTES[palette];f=Frame(w,h)
             if worker:
                 sample,error=worker.read()
@@ -209,6 +227,8 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
                         try:journal.append(sample);record_error=''
                         except (OSError,ValueError) as exc:record_error=str(exc);recording=False
                 f,_=render_monitor(kind,sample,w,h,history,scroll,palette,STYLES[font_index],font_size,traces)
+            elif kind in UTILITY_IDS:
+                f=playback.utilities.render(kind,w,h,palette,STYLES[font_index],font_size,now)
             elif kind=='calendar':
                 from .dashboard import render_calendar
                 f=render_calendar(w,h,year,month,today,STYLES[font_index],font_size,scroll,year_view,palette)
@@ -238,7 +258,7 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
                 from .typography import number_art
                 art=number_art(label,max(1,w-4),max(1,h//3),STYLES[font_index],font_size)
                 big_text(f,max(1,(w-art.w)//2),max(4,h//3-2),label,p[0],width=max(1,w-4),height=max(1,h//3),style=STYLES[font_index],size=font_size)
-                f.text(2,h-4,'Space старт/пауза  L круг  R сброс',DIM)
+                f.text(2,h-4,'Space старт/пауза  L круг  Backspace сброс',DIM)
                 for y,value in enumerate(laps[-max(1,h//3):],max(5,h//2)):f.text(3,y,f'Круг {len(laps)-len(laps[-max(1,h//3):])+y-max(5,h//2)+1}: {duration(value)}',p[2])
             elif kind=='timezones':
                 from .dashboard import render_world_clocks
@@ -266,20 +286,29 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
             if record_error:f.text(2,h-3,'Запись остановлена: '+record_error,p[4])
             elif error:f.text(2,h-3,error,p[4])
             elif worker:f.text(2,h-3,'↑↓ прокрутка · — означает: ещё нет замера или данные недоступны',DIM)
-            f.text(2,h-2,f'Esc меню  P цвет  F {STYLE_LABELS[font_index]}  +/- размер  [ / ] инструмент',DIM)
+            status=f'АВТО: {playback.auto.remaining(now)}с' if playback.auto.enabled else 'удержать R 2с: авто'
+            f.text(2,h-2,f'R случайный · {status} · N следующий · Esc меню',DIM)
+            font_label=font_control(kind,w,h)
+            help_line='P палитра · A авто вкл/выкл'
+            if font_label:help_line+=f' · F {font_label}: {STYLE_LABELS[font_index].lower()}'
+            f.text(2,h-1,help_line,DIM)
             term.draw(f);key=term.read(.1)
             from .playback import canonical_key
+            raw_key=key
             if key is not None:key=canonical_key(key)
             if key in ('escape','q','\x03'):return
-            if key=='f':font_index=(font_index+1)%len(STYLES)
-            elif key in ('+','='):font_size=min(2,font_size+1)
-            elif key=='-':font_size=max(-1,font_size-1)
-            elif key=='p':palette=(palette+1)%len(PALETTES)
+            next_tool=playback.key(key,kind,ids,time.monotonic())
+            if next_tool:return next_tool
+            if key in ('r','a','n'):continue
+            if kind in UTILITY_IDS and key is not None and playback.utilities.key(kind,raw_key if kind=='key-inspector' else key,time.monotonic()):continue
+            if key=='f' and font_label:font_index=(font_index+1)%len(STYLES)
+            elif key=='p':palette=(palette+1)%len(PALETTES);playback.palette=palette
             elif key in ('down','j'):scroll+=1
             elif key in ('up','k'):scroll=max(0,scroll-1)
             elif key=='pgdown':scroll+=max(1,h-12)
             elif key=='pgup':scroll=max(0,scroll-max(1,h-12))
             elif key in ('[',']'):
+                playback.auto.reset(now)
                 return ids[(ids.index(kind)+(1 if key==']' else -1))%len(ids)]
             elif key=='l' and kind in KINDS:recording=not recording
             elif kind=='calendar':
@@ -293,7 +322,7 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
                     if watch_running:watch_elapsed=now-watch_started
                     else:watch_started=now-watch_elapsed
                     watch_running=not watch_running
-                elif key=='r':watch_elapsed=0.;watch_started=now;laps=[]
+                elif key=='backspace':watch_elapsed=0.;watch_started=now;laps=[]
                 elif key=='l':laps.append(now-watch_started if watch_running else watch_elapsed)
             elif kind=='journals' and key=='tab':journal_index=(journal_index+1)%len(KINDS);scroll=0
     finally:
@@ -306,5 +335,8 @@ def show(term,kind,palette=0,path=None,duration_limit=None):
         except OSError:pass
 
 
-def run_tool(term,kind,**kwargs):
-    while kind:kind=show(term,kind,**kwargs)
+def run_tool(term,kind,random_pressed=False,**kwargs):
+    from .system_playback import SystemPlayback
+    playback=SystemPlayback()
+    if random_pressed:playback.hold.press(time.monotonic())
+    while kind:kind=show(term,kind,playback=playback,**kwargs)

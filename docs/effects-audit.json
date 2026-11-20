@@ -1,0 +1,1646 @@
+{
+  "version": "0.7.2",
+  "counting": {
+    "effects": 200,
+    "tools": 19,
+    "built_in_modes": 219,
+    "external_links": 41
+  },
+  "categories": {
+    "Природа": 23,
+    "Абстракции": 14,
+    "Ретро": 18,
+    "Космос": 15,
+    "Часы": 1,
+    "Музыка": 1,
+    "Фракталы": 11,
+    "Частицы": 9,
+    "Геометрия": 15,
+    "Аттракторы": 5,
+    "Световые скульптуры": 8,
+    "Генеративное искусство": 10,
+    "Математические поверхности": 12,
+    "Световые кривые": 12,
+    "Хаотические карты": 10,
+    "Оптические поля": 12,
+    "Потоки и орбиты": 10,
+    "Демосцена": 8,
+    "Орнаменты": 6
+  },
+  "sampling": {
+    "size": [
+      48,
+      16
+    ],
+    "times": [
+      1,
+      8,
+      16
+    ],
+    "seed": 23
+  },
+  "errors": [],
+  "identical_samples": [],
+  "scenes": [
+    {
+      "id": "bonsai",
+      "title": "Бонсай",
+      "category": "Природа",
+      "render_ms_48x16": 0.31,
+      "ink_cells": 95,
+      "fingerprint": "f766605bd1ce6173193b117038380976f2e4d1c5ace2f363d044d4e2fcbc7b56"
+    },
+    {
+      "id": "sakura",
+      "title": "Сакура",
+      "category": "Природа",
+      "render_ms_48x16": 0.25,
+      "ink_cells": 107,
+      "fingerprint": "643f8b47df46137d6f84ccf08442323ea3c4e8903f2e7008ea4465b6210eff63"
+    },
+    {
+      "id": "aquarium",
+      "title": "Аквариум",
+      "category": "Природа",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 86,
+      "fingerprint": "1baea99be4c88ab67fc659538609a01307e2682017eaf101dfb4a4227fa4b399"
+    },
+    {
+      "id": "snow",
+      "title": "Снег",
+      "category": "Природа",
+      "render_ms_48x16": 0.07,
+      "ink_cells": 21,
+      "fingerprint": "5fa13779e1dd2dfc26a4f1b09c445b2b8c0406dfd6f08d7bff43bca028114c7b"
+    },
+    {
+      "id": "rain",
+      "title": "Дождь",
+      "category": "Природа",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 52,
+      "fingerprint": "dc2a6a08cdf5768b2c9d0e9e8f0acdfd9061908b3b7fd4a1fd856dbc1b5c6082"
+    },
+    {
+      "id": "lava",
+      "title": "Лавовая лампа",
+      "category": "Абстракции",
+      "render_ms_48x16": 10.02,
+      "ink_cells": 423,
+      "fingerprint": "1d27ba40c0fa04be457f649cd1866a32bb461fc868fe33e47616672f21f9fcc0"
+    },
+    {
+      "id": "particles",
+      "title": "Потоки частиц",
+      "category": "Абстракции",
+      "render_ms_48x16": 4.04,
+      "ink_cells": 585,
+      "fingerprint": "af16ef4fdc12375fac9c1c355b50b33129590209dd3e4392b89f1e11a051378a"
+    },
+    {
+      "id": "plasma",
+      "title": "Плазма",
+      "category": "Абстракции",
+      "render_ms_48x16": 1.46,
+      "ink_cells": 768,
+      "fingerprint": "f5af3edaba4d220cbb9adba11e16f13d8ed5829ad61f01896977c17167d6e29b"
+    },
+    {
+      "id": "fire",
+      "title": "Огонь",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.55,
+      "ink_cells": 441,
+      "fingerprint": "ae2fc1d198ff0ff439fa7f7a438274809a9b5836cbe477383cf0c88405adb5aa"
+    },
+    {
+      "id": "fireworks",
+      "title": "Фейерверк",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.28,
+      "ink_cells": 89,
+      "fingerprint": "2b04a2d21a1e89295ca6676bc2fb2d2c33824a8902aced5339edb5efdf79d97d"
+    },
+    {
+      "id": "life",
+      "title": "Игра «Жизнь»",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.4,
+      "ink_cells": 190,
+      "fingerprint": "c085e05043f3dba1aaa9dafd1a90f3784533425c9f75c58cbfc90027291e4fd8"
+    },
+    {
+      "id": "pipes",
+      "title": "Трубы",
+      "category": "Ретро",
+      "render_ms_48x16": 0.07,
+      "ink_cells": 10,
+      "fingerprint": "4df3ba80eadc263b67a14c3a67f6683cb61380656e4b74ebf6b0839e5df03678"
+    },
+    {
+      "id": "matrix",
+      "title": "Матрица",
+      "category": "Ретро",
+      "render_ms_48x16": 0.14,
+      "ink_cells": 184,
+      "fingerprint": "e4826679f7479695a5379defa94ac996c4e961367d6754707e0e2efae5b64d8b"
+    },
+    {
+      "id": "stars",
+      "title": "Звёздный полёт",
+      "category": "Космос",
+      "render_ms_48x16": 0.27,
+      "ink_cells": 47,
+      "fingerprint": "67b5149f1531e1a0d30ea59fa5020e188f84824ca3d6e13eebe4945cc5c89fed"
+    },
+    {
+      "id": "globe",
+      "title": "Глобус",
+      "category": "Космос",
+      "render_ms_48x16": 2.03,
+      "ink_cells": 210,
+      "fingerprint": "0b6a59e649b7c50b123985f4a801881ed5356043cdeee8a328625e3805a68ce7"
+    },
+    {
+      "id": "clock",
+      "title": "Часы",
+      "category": "Часы",
+      "render_ms_48x16": 0.1,
+      "ink_cells": 78,
+      "fingerprint": "e4ff882546c585ad5eaa081f25df6c30eb041f8d2eaef0fd24698d2106a0ef1e"
+    },
+    {
+      "id": "donut",
+      "title": "Пончик 3D",
+      "category": "Ретро",
+      "render_ms_48x16": 3.46,
+      "ink_cells": 218,
+      "fingerprint": "30f0f1347c263ef5292f3e3ad19b182b316981043af3b445686566a08745b944"
+    },
+    {
+      "id": "dvd",
+      "title": "DVD",
+      "category": "Ретро",
+      "render_ms_48x16": 0.07,
+      "ink_cells": 9,
+      "fingerprint": "79fb7d2b0c28e05fd66149c1b6af9ada9e99fa532d0a818105805ebe5307eeee"
+    },
+    {
+      "id": "spectrum",
+      "title": "Спектр · демо",
+      "category": "Музыка",
+      "render_ms_48x16": 0.11,
+      "ink_cells": 268,
+      "fingerprint": "c462d0d4f5994a18c3abbed6c21dad74749721b64043558e65c78e03daea9e76"
+    },
+    {
+      "id": "aurora",
+      "title": "Северное сияние",
+      "category": "Природа",
+      "render_ms_48x16": 0.28,
+      "ink_cells": 316,
+      "fingerprint": "20fd4e64d8b04b88d87f4b6090b7a38664812956bc870281c236fb77629d196a"
+    },
+    {
+      "id": "galaxy",
+      "title": "Спиральная галактика",
+      "category": "Космос",
+      "render_ms_48x16": 2.34,
+      "ink_cells": 270,
+      "fingerprint": "8b5af3002c0d28e5f49df22371c213078922566ae69a69e393ec7b69bdb561dd"
+    },
+    {
+      "id": "blackhole",
+      "title": "Чёрная дыра",
+      "category": "Космос",
+      "render_ms_48x16": 1.55,
+      "ink_cells": 165,
+      "fingerprint": "aeba00be4f6d3439676b81cd03230eb3e07e6b4c62dbc253c49125dfa3e15d67"
+    },
+    {
+      "id": "ocean",
+      "title": "Океан",
+      "category": "Природа",
+      "render_ms_48x16": 0.29,
+      "ink_cells": 361,
+      "fingerprint": "29272c73c059ee6a6a730d28f18285b89a66656bc85dfa1380f20f9978ad1641"
+    },
+    {
+      "id": "ripple",
+      "title": "Круги на воде",
+      "category": "Природа",
+      "render_ms_48x16": 0.31,
+      "ink_cells": 315,
+      "fingerprint": "0c5a3d305b62eb5c03ed99aeb4c897c5e60779b98af0ee8734f8381bdf6da51b"
+    },
+    {
+      "id": "tunnel",
+      "title": "Неоновый туннель",
+      "category": "Ретро",
+      "render_ms_48x16": 0.35,
+      "ink_cells": 541,
+      "fingerprint": "d3b11171f4647d8eb493b16220eb091b0fe7978774bc871b704917c1217142c0"
+    },
+    {
+      "id": "terrain",
+      "title": "Ландшафт",
+      "category": "Ретро",
+      "render_ms_48x16": 2.18,
+      "ink_cells": 188,
+      "fingerprint": "e6ad5fcf5f998402ace4dc02601a54acb1e1cca824fdb098af1bce641f4a9d42"
+    },
+    {
+      "id": "dna",
+      "title": "ДНК",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.12,
+      "ink_cells": 146,
+      "fingerprint": "909d101e0059acce4bdcfe55ca5172d9d2efa25b7a14f1c30ee370ddc1d62339"
+    },
+    {
+      "id": "lissajous",
+      "title": "Кривые Лиссажу",
+      "category": "Абстракции",
+      "render_ms_48x16": 1.26,
+      "ink_cells": 263,
+      "fingerprint": "02845babb5188717d55e103d753e90adce2be2bd6813ac16ec6138d7b96eba43"
+    },
+    {
+      "id": "lorenz",
+      "title": "Аттрактор Лоренца",
+      "category": "Абстракции",
+      "render_ms_48x16": 2.3,
+      "ink_cells": 342,
+      "fingerprint": "9bd4721a0182458cee04b11b270dff94805f432719153f683a8879b047d0e411"
+    },
+    {
+      "id": "pendulum",
+      "title": "Маятниковая волна",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.14,
+      "ink_cells": 181,
+      "fingerprint": "576076b976bfcaa47e25beacfbc8706c71bf9e33f6b80719c08eed70d5fd7551"
+    },
+    {
+      "id": "kaleidoscope",
+      "title": "Калейдоскоп",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.47,
+      "ink_cells": 478,
+      "fingerprint": "22bb4fa91a6b1b7827ebf49ae53678b0cbb11e31f7ddd449139324724d3d3a6a"
+    },
+    {
+      "id": "lightning",
+      "title": "Молнии",
+      "category": "Природа",
+      "render_ms_48x16": 0.13,
+      "ink_cells": 54,
+      "fingerprint": "1f57b2f9d8841ae7be6ddd187935a88bd540542b225ca95789c7caeae80738d9"
+    },
+    {
+      "id": "bubbles",
+      "title": "Пузырьки",
+      "category": "Природа",
+      "render_ms_48x16": 0.04,
+      "ink_cells": 7,
+      "fingerprint": "c838d8eaaac10d5ac5c19070f95ebaef6638e6ffe9b8e3c0b5e833ee4fc764f6"
+    },
+    {
+      "id": "fireflies",
+      "title": "Светлячки",
+      "category": "Природа",
+      "render_ms_48x16": 0.05,
+      "ink_cells": 14,
+      "fingerprint": "4f053abd082e82720c9588c0c983e8d8c8258d318616f60010ce4aba0cac1be8"
+    },
+    {
+      "id": "orbit",
+      "title": "Орбиты",
+      "category": "Космос",
+      "render_ms_48x16": 0.42,
+      "ink_cells": 239,
+      "fingerprint": "984a43831c79cd833fabc9f74c1713dd8071b1166101c06f3735d77c1606b199"
+    },
+    {
+      "id": "radar",
+      "title": "Радар",
+      "category": "Ретро",
+      "render_ms_48x16": 0.78,
+      "ink_cells": 149,
+      "fingerprint": "ab159d60a6a5ddc30884f8b55557ee340098c387cc5db99a3a971bb5334a8112"
+    },
+    {
+      "id": "boids",
+      "title": "Стая",
+      "category": "Природа",
+      "render_ms_48x16": 0.64,
+      "ink_cells": 36,
+      "fingerprint": "9abf68495af705bba5094d81fbe90282c6f06d9834ac39cfaea63f70c93878fb"
+    },
+    {
+      "id": "maze",
+      "title": "Лабиринт",
+      "category": "Ретро",
+      "render_ms_48x16": 0.17,
+      "ink_cells": 756,
+      "fingerprint": "ded688decb8b8e7c431ac6c94c90355a55f31a8243b4c6bbb4ff23816f4b3e4f"
+    },
+    {
+      "id": "mandelbrot",
+      "title": "Множество Мандельброта",
+      "category": "Фракталы",
+      "render_ms_48x16": 1.83,
+      "ink_cells": 490,
+      "fingerprint": "18d084469096356cc42868c640eadf7a34f752544905d390c896381328258af7"
+    },
+    {
+      "id": "julia",
+      "title": "Множество Жюлиа",
+      "category": "Фракталы",
+      "render_ms_48x16": 1.87,
+      "ink_cells": 300,
+      "fingerprint": "1df8b4924ce694b89d822b0ee776d34bdaa88dc3fccd59b2a5800fbe47ee02ce"
+    },
+    {
+      "id": "rings",
+      "title": "Пульсирующие кольца",
+      "category": "Абстракции",
+      "render_ms_48x16": 1.3,
+      "ink_cells": 540,
+      "fingerprint": "a16c15d31bfc945210d7f819e9bd34674d647daf4f05f291127fafa5d098922e"
+    },
+    {
+      "id": "rose",
+      "title": "Полярная роза",
+      "category": "Абстракции",
+      "render_ms_48x16": 1.55,
+      "ink_cells": 171,
+      "fingerprint": "ce0d266c0ff2794c1937be4a7f9e40dc724319869113adea58d5d0c095032d6a"
+    },
+    {
+      "id": "rainbows",
+      "title": "Радужные арки",
+      "category": "Абстракции",
+      "render_ms_48x16": 0.28,
+      "ink_cells": 319,
+      "fingerprint": "7e89b18c249b033b10e2ce3ec5341081fea5c8dd9a753a0966982e29cdca9a66"
+    },
+    {
+      "id": "nebula",
+      "title": "Туманность",
+      "category": "Космос",
+      "render_ms_48x16": 2.46,
+      "ink_cells": 422,
+      "fingerprint": "13b6b01d1c4f9b0a392dbe715ac814da1e782fc9c91e607c5c04f094783a910f"
+    },
+    {
+      "id": "pulsar",
+      "title": "Пульсар",
+      "category": "Космос",
+      "render_ms_48x16": 1.56,
+      "ink_cells": 80,
+      "fingerprint": "f92a13e1c2f81b3e031237b2ce44e91cc18479a820539373877c0d4329c01e3f"
+    },
+    {
+      "id": "comet",
+      "title": "Комета",
+      "category": "Космос",
+      "render_ms_48x16": 0.73,
+      "ink_cells": 69,
+      "fingerprint": "6afb49a455cb8f54a9f427161e90ae694ab8fc2001cdd80b0fe343598f287f41"
+    },
+    {
+      "id": "meteors",
+      "title": "Метеорный дождь",
+      "category": "Космос",
+      "render_ms_48x16": 0.27,
+      "ink_cells": 73,
+      "fingerprint": "eec859cc8b021c947a5da31c026765172d6ebb6fb3483b82180f712d46053cea"
+    },
+    {
+      "id": "saturn",
+      "title": "Сатурн",
+      "category": "Космос",
+      "render_ms_48x16": 1.75,
+      "ink_cells": 202,
+      "fingerprint": "1f0c215b795975280ebc767f71486a726d5d1afecf9bf0152c64b52bd247d161"
+    },
+    {
+      "id": "wormhole",
+      "title": "Червоточина",
+      "category": "Космос",
+      "render_ms_48x16": 1.98,
+      "ink_cells": 537,
+      "fingerprint": "2de80b51ce4470a64e8c02fddc5dd1ab2b52261edd3d8bf840860f64cc1d42ca"
+    },
+    {
+      "id": "startrails",
+      "title": "Звёздные треки",
+      "category": "Космос",
+      "render_ms_48x16": 2.23,
+      "ink_cells": 99,
+      "fingerprint": "243ea9c9ea6b1a10c71e7a4ace9c5349b4a902d76afac93d2c18800445e8240d"
+    },
+    {
+      "id": "moon",
+      "title": "Фазы Луны",
+      "category": "Космос",
+      "render_ms_48x16": 0.99,
+      "ink_cells": 279,
+      "fingerprint": "eff8f4f21c762ce45fc3a7fa282d57f39e3e6ee59055b816bacfb38c844a8b17"
+    },
+    {
+      "id": "eclipse",
+      "title": "Затмение",
+      "category": "Космос",
+      "render_ms_48x16": 0.26,
+      "ink_cells": 175,
+      "fingerprint": "a8cde82c2d2895e732d5f4b97ba198d15d59f1440e18a1b19a3f4428f789f8ba"
+    },
+    {
+      "id": "supernova",
+      "title": "Сверхновая",
+      "category": "Космос",
+      "render_ms_48x16": 1.94,
+      "ink_cells": 28,
+      "fingerprint": "4cd6dd6814895d31c65e2ede80d94c13f0c6dc4c1c56cdcd03399f6efa903737"
+    },
+    {
+      "id": "clouds",
+      "title": "Облака",
+      "category": "Природа",
+      "render_ms_48x16": 0.41,
+      "ink_cells": 467,
+      "fingerprint": "e8897e44c01ff2616009d7df24b832c5f8241282d8019cb763d93d4e353e844d"
+    },
+    {
+      "id": "waterfall",
+      "title": "Водопад",
+      "category": "Природа",
+      "render_ms_48x16": 0.25,
+      "ink_cells": 326,
+      "fingerprint": "1ea3332707183f04d6d4c4a62c0b0aaeaba59a21e1b1e5807e8a7e719178c4f3"
+    },
+    {
+      "id": "autumn",
+      "title": "Листопад",
+      "category": "Природа",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 25,
+      "fingerprint": "fc779f9fda67ba0a682458aed7492fa4b3df64f10322625fda429d139b63611f"
+    },
+    {
+      "id": "meadow",
+      "title": "Цветущий луг",
+      "category": "Природа",
+      "render_ms_48x16": 0.08,
+      "ink_cells": 129,
+      "fingerprint": "c0dad354434dc130a132881cc8dca82fd7eb8c183ddecb8d828254cc5cb504bf"
+    },
+    {
+      "id": "forest",
+      "title": "Ночной лес",
+      "category": "Природа",
+      "render_ms_48x16": 0.11,
+      "ink_cells": 219,
+      "fingerprint": "96f1c4a1abcc576e10351c932423d918f31aa9334c345ef6b83f1a45c2f189c1"
+    },
+    {
+      "id": "rainwindow",
+      "title": "Дождь за окном",
+      "category": "Природа",
+      "render_ms_48x16": 0.08,
+      "ink_cells": 164,
+      "fingerprint": "d04b63603e217f639552d2c7b21b9a6dcffe568cdaaed26dd72eb078a9fa7bf2"
+    },
+    {
+      "id": "campfire",
+      "title": "Костёр",
+      "category": "Природа",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 73,
+      "fingerprint": "dee9e6f7a5354ebe17f7ba955210cf7e4d8ea35218c0d10679208a6168e3eb27"
+    },
+    {
+      "id": "jellyfish",
+      "title": "Медузы",
+      "category": "Природа",
+      "render_ms_48x16": 1.34,
+      "ink_cells": 96,
+      "fingerprint": "5c96ae9d8c020f2e2e5003151df51b74b883e7d2ffdc2e85a757464ac2b0b1d1"
+    },
+    {
+      "id": "butterflies",
+      "title": "Бабочки",
+      "category": "Природа",
+      "render_ms_48x16": 0.62,
+      "ink_cells": 44,
+      "fingerprint": "8f21c3aee7343489f7a6042d07e61dfefc766fa1d7d36a74d847fd4da18252e4"
+    },
+    {
+      "id": "flowers",
+      "title": "Сад цветов",
+      "category": "Природа",
+      "render_ms_48x16": 1.43,
+      "ink_cells": 81,
+      "fingerprint": "f458f9136a79c27c7d07425061d1bf5a4b165057e27da1dcde28f2cf7b1b7137"
+    },
+    {
+      "id": "coral",
+      "title": "Коралловый риф",
+      "category": "Природа",
+      "render_ms_48x16": 1.58,
+      "ink_cells": 246,
+      "fingerprint": "14d0f7c484a3d514c6e392c26092f249f31e0aa9c2cbccdef32c4648918d9b5b"
+    },
+    {
+      "id": "sand",
+      "title": "Песчаные дюны",
+      "category": "Частицы",
+      "render_ms_48x16": 0.41,
+      "ink_cells": 353,
+      "fingerprint": "9e1f8007512d3b90466aa1bf9fdcbf5bc479408043a73d1b1f5eec8a770d3497"
+    },
+    {
+      "id": "fountain",
+      "title": "Фонтан",
+      "category": "Частицы",
+      "render_ms_48x16": 1.13,
+      "ink_cells": 119,
+      "fingerprint": "fbeb34beca0ee683ebd22382d33a787a54bda01585607b19d9389eb77be1055e"
+    },
+    {
+      "id": "sparks",
+      "title": "Искры",
+      "category": "Частицы",
+      "render_ms_48x16": 0.5,
+      "ink_cells": 25,
+      "fingerprint": "ee570fea20e9a71f83c6a16826d1fe07602063a4f31f24c6371a4cb5a62a2ed2"
+    },
+    {
+      "id": "magnets",
+      "title": "Магнитное поле",
+      "category": "Частицы",
+      "render_ms_48x16": 2.87,
+      "ink_cells": 484,
+      "fingerprint": "bad802662df8184ebd585b6ed71c64c2170cabd94d68c303082be75dc33192f4"
+    },
+    {
+      "id": "vortex",
+      "title": "Вихрь",
+      "category": "Частицы",
+      "render_ms_48x16": 1.72,
+      "ink_cells": 146,
+      "fingerprint": "19852b571ae2fb6d5fb762e99701b89360a27c46e3ce3ea7cf8cc057f94d93f7"
+    },
+    {
+      "id": "fluid",
+      "title": "Течение",
+      "category": "Частицы",
+      "render_ms_48x16": 3.18,
+      "ink_cells": 379,
+      "fingerprint": "de5ee9f8431a6c3dd9b8fc61472bb9b74d1c67e19c778adbab38f946d2930010"
+    },
+    {
+      "id": "smoke",
+      "title": "Дым",
+      "category": "Частицы",
+      "render_ms_48x16": 1.65,
+      "ink_cells": 57,
+      "fingerprint": "8a3ee2380c0908814f5692b54f4d6cd763c91c5eaa2d659bb2238e72fef6f912"
+    },
+    {
+      "id": "diffusion",
+      "title": "Диффузные узоры",
+      "category": "Частицы",
+      "render_ms_48x16": 0.56,
+      "ink_cells": 204,
+      "fingerprint": "6cab6305c493b141b250d96e4b3b26ab7b4fc5606a28a29abe80a5cca6bcf9fc"
+    },
+    {
+      "id": "explosion",
+      "title": "Взрыв частиц",
+      "category": "Частицы",
+      "render_ms_48x16": 1.81,
+      "ink_cells": 105,
+      "fingerprint": "0bce9ed6df0fbd9b790bb2306ccda9bd63f42fa1801202a0ca1ccf01105af546"
+    },
+    {
+      "id": "cube",
+      "title": "Вращающийся куб",
+      "category": "Геометрия",
+      "render_ms_48x16": 1.56,
+      "ink_cells": 132,
+      "fingerprint": "c375b0b80cc52507ab5084ba8b419cfb54219ac9de1b8e0ad9e6656e2fdc1318"
+    },
+    {
+      "id": "tesseract",
+      "title": "Тессеракт",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.32,
+      "ink_cells": 191,
+      "fingerprint": "2657327261e2946e5724588cdb5ebc7ffbcf51aa9fe11db1f5714716c55ad3a3"
+    },
+    {
+      "id": "sphere",
+      "title": "Каркасная сфера",
+      "category": "Геометрия",
+      "render_ms_48x16": 3.66,
+      "ink_cells": 254,
+      "fingerprint": "099b7acadfa4148042a593a52d80519e3421309fb6a8257a32fa8ab27d1e8d63"
+    },
+    {
+      "id": "torusknot",
+      "title": "Тороидальный узел",
+      "category": "Геометрия",
+      "render_ms_48x16": 3.95,
+      "ink_cells": 68,
+      "fingerprint": "2388aafea4af70534f5bac5ec02b41a2d69cd793bebcb4cd47ba8b84eddc9b06"
+    },
+    {
+      "id": "mobius",
+      "title": "Лента Мёбиуса",
+      "category": "Геометрия",
+      "render_ms_48x16": 3.82,
+      "ink_cells": 82,
+      "fingerprint": "96ec45bc11b944bbd679552e2ce84aa51976f17c1406c24fb4d628f3a627cd05"
+    },
+    {
+      "id": "klein",
+      "title": "Бутылка Клейна",
+      "category": "Геометрия",
+      "render_ms_48x16": 6.18,
+      "ink_cells": 114,
+      "fingerprint": "b528a1b49c01e4f9c0915bf6d6facb79bde015071969b3caa83008d766324664"
+    },
+    {
+      "id": "helix",
+      "title": "Пружина",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.59,
+      "ink_cells": 122,
+      "fingerprint": "d42d405fc361d9c2ca7f136a1c54b2fbb0187b74ac27698c0c38577f6cbbb1d2"
+    },
+    {
+      "id": "superformula",
+      "title": "Суперформула",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.4,
+      "ink_cells": 99,
+      "fingerprint": "767eae8373cd17be31c403a27d8766de10cfa64ec2ef0df5787fcfbd6cd5d5fd"
+    },
+    {
+      "id": "harmonograph",
+      "title": "Гармонограф",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.57,
+      "ink_cells": 186,
+      "fingerprint": "255ca57a8cd5f5c82669e3a819065fca442ab3e290a505e4b66c105034513bf3"
+    },
+    {
+      "id": "spirograph",
+      "title": "Спирограф",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.89,
+      "ink_cells": 447,
+      "fingerprint": "feccf7933bdeff9cc34c07042842f5dabff4c9f889b7155cc576d29175693d11"
+    },
+    {
+      "id": "moire",
+      "title": "Муар",
+      "category": "Геометрия",
+      "render_ms_48x16": 0.61,
+      "ink_cells": 336,
+      "fingerprint": "5ee523006b55453cac35b51a4f4d031e697e8d797c3c4344d7b8ecdf29f4ab9c"
+    },
+    {
+      "id": "interference",
+      "title": "Интерференция",
+      "category": "Геометрия",
+      "render_ms_48x16": 1.07,
+      "ink_cells": 362,
+      "fingerprint": "a01f3a64c5e23cfce34a890f9d37767208b00e9e58288fb4ff4a7aec2fd7946a"
+    },
+    {
+      "id": "checkerboard",
+      "title": "Шахматная перспектива",
+      "category": "Ретро",
+      "render_ms_48x16": 0.47,
+      "ink_cells": 381,
+      "fingerprint": "fc48e7e57390971edd39383cd032cf82ab68c22dbbfa564524419c8beef2eee2"
+    },
+    {
+      "id": "waves3d",
+      "title": "Объёмные волны",
+      "category": "Геометрия",
+      "render_ms_48x16": 3.34,
+      "ink_cells": 156,
+      "fingerprint": "4cddd4fd2fadedc36b6d753cc7f71abcfbbcf3e131d8f093add3c687a157fc72"
+    },
+    {
+      "id": "quasicrystal",
+      "title": "Квазикристалл",
+      "category": "Геометрия",
+      "render_ms_48x16": 2.27,
+      "ink_cells": 512,
+      "fingerprint": "2b9e51016570a37e6a31d8ca47834d7de266aa22abe494bf8348902ed01cae08"
+    },
+    {
+      "id": "vectorgrid",
+      "title": "Поле векторов",
+      "category": "Геометрия",
+      "render_ms_48x16": 0.17,
+      "ink_cells": 146,
+      "fingerprint": "9c16e812965491ddeb51598a9ecb9c2aa477784c510a1e31b455f5fbea7a277e"
+    },
+    {
+      "id": "sierpinski",
+      "title": "Треугольник Серпинского",
+      "category": "Фракталы",
+      "render_ms_48x16": 4.4,
+      "ink_cells": 273,
+      "fingerprint": "9bf9f7f7a497357339a00c3e74b6657f069e41b0670e848a8e3dbfdc0969aa79"
+    },
+    {
+      "id": "fern",
+      "title": "Папоротник Барнсли",
+      "category": "Фракталы",
+      "render_ms_48x16": 5.24,
+      "ink_cells": 301,
+      "fingerprint": "ef9f3dda4a50e8ba8a2447e1c61ed59cfdfc43ad536e3a84454f15772d8f9903"
+    },
+    {
+      "id": "dragon",
+      "title": "Кривая дракона",
+      "category": "Фракталы",
+      "render_ms_48x16": 4.92,
+      "ink_cells": 449,
+      "fingerprint": "2e30fda7150ec1d9981c35a824286f8d3f0a3f8076f9b78c030b989f7db7166c"
+    },
+    {
+      "id": "hilbert",
+      "title": "Кривая Гильберта",
+      "category": "Фракталы",
+      "render_ms_48x16": 5.88,
+      "ink_cells": 415,
+      "fingerprint": "2f6ff2b0a473d7d2eb959cc961fa69717aafeafc0f71eb6f3ca3f6175d011b25"
+    },
+    {
+      "id": "koch",
+      "title": "Снежинка Коха",
+      "category": "Фракталы",
+      "render_ms_48x16": 0.8,
+      "ink_cells": 156,
+      "fingerprint": "6287f409e24c85f978f68a48b3a1614a6a27ae05ccf1726394d8cbb6a271a5f4"
+    },
+    {
+      "id": "burningship",
+      "title": "Горящий корабль",
+      "category": "Фракталы",
+      "render_ms_48x16": 3.4,
+      "ink_cells": 679,
+      "fingerprint": "b5f5a3fbc67aa7821458c4f406bc3c5fb11bd4baa90c49d97a6464208ccbb458"
+    },
+    {
+      "id": "newton",
+      "title": "Бассейны Ньютона",
+      "category": "Фракталы",
+      "render_ms_48x16": 3.54,
+      "ink_cells": 768,
+      "fingerprint": "dfbb26a4c89ab26fb1a37e003ca3d89f07fe32bac2bba6185b5147c326259367"
+    },
+    {
+      "id": "apollonian",
+      "title": "Аполлониевы узоры",
+      "category": "Фракталы",
+      "render_ms_48x16": 2.17,
+      "ink_cells": 598,
+      "fingerprint": "eaeac31ae56aed48b11aaec3321cb13d3a60a1bfa2fee28700d67930c30525f0"
+    },
+    {
+      "id": "reaction",
+      "title": "Реакционные пятна",
+      "category": "Фракталы",
+      "render_ms_48x16": 1.19,
+      "ink_cells": 154,
+      "fingerprint": "89ae1ce228e24d276abfd0de7ce29b97671e2c106de451428e335d7c89cdc4f2"
+    },
+    {
+      "id": "pacman",
+      "title": "Пакман · заставка",
+      "category": "Ретро",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 12,
+      "fingerprint": "e3b17798a8204802076e1ee10c3a48f846030d4c3756e0966b5cb8ad2390e7a8"
+    },
+    {
+      "id": "pong",
+      "title": "Понг · заставка",
+      "category": "Ретро",
+      "render_ms_48x16": 0.04,
+      "ink_cells": 19,
+      "fingerprint": "b5a79c6c9de47280ca490416d8695b1fd5d1acfd3c229563acb5c68612b46bff"
+    },
+    {
+      "id": "invaders",
+      "title": "Космические захватчики",
+      "category": "Ретро",
+      "render_ms_48x16": 0.08,
+      "ink_cells": 130,
+      "fingerprint": "5aac040280e986f01e086633bb76a8639e71881ccbfacb02bd9812b1f0c03fad"
+    },
+    {
+      "id": "snake",
+      "title": "Змейка · заставка",
+      "category": "Ретро",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 41,
+      "fingerprint": "ed5ce932434c22aa5854993bb81eeeb1b4f932c60057e262a157a3a6d1d4da0e"
+    },
+    {
+      "id": "sinescroller",
+      "title": "Синусный скроллер",
+      "category": "Ретро",
+      "render_ms_48x16": 0.06,
+      "ink_cells": 18,
+      "fingerprint": "5eaeda4ab1bd2e78ffcf210c1f9f772fdba244f83406128de4847f903a7bb12b"
+    },
+    {
+      "id": "maze3d",
+      "title": "Трёхмерный коридор",
+      "category": "Ретро",
+      "render_ms_48x16": 0.19,
+      "ink_cells": 388,
+      "fingerprint": "d1038f41a8ede5cad09bc7861f9782f3404dfbb29abbc2c9ebc724bde7be991a"
+    },
+    {
+      "id": "toasters",
+      "title": "Летающие тостеры",
+      "category": "Ретро",
+      "render_ms_48x16": 0.07,
+      "ink_cells": 28,
+      "fingerprint": "e93ae08115a1c4fae4bce7eac778c5c1e82953feafa4d811e48ed582ed9e013e"
+    },
+    {
+      "id": "tron",
+      "title": "Световые трассы",
+      "category": "Ретро",
+      "render_ms_48x16": 0.05,
+      "ink_cells": 8,
+      "fingerprint": "dbdc25878eb755a1d68272ff7e546b8d2e1431d654099a37806df8194346011c"
+    },
+    {
+      "id": "skyline",
+      "title": "Ночной город",
+      "category": "Ретро",
+      "render_ms_48x16": 0.14,
+      "ink_cells": 301,
+      "fingerprint": "16244b24d08bf75357250c470517047318eecefff69587a1f5f4725a5c5dc2cd"
+    },
+    {
+      "id": "doublependulum",
+      "title": "Двойной маятник · узор",
+      "category": "Аттракторы",
+      "render_ms_48x16": 0.92,
+      "ink_cells": 97,
+      "fingerprint": "016365de6f4eb2ec236229b8ca333e4febc1a702d0b20cad43d20af7371d4b78"
+    },
+    {
+      "id": "rossler",
+      "title": "Аттрактор Рёсслера",
+      "category": "Аттракторы",
+      "render_ms_48x16": 6.8,
+      "ink_cells": 75,
+      "fingerprint": "dc926f88bfa9e46ab106cea50e25424bf2b7e9bd88cc745ba53f90c33dc945fd"
+    },
+    {
+      "id": "clifford",
+      "title": "Аттрактор Клиффорда",
+      "category": "Аттракторы",
+      "render_ms_48x16": 6.98,
+      "ink_cells": 265,
+      "fingerprint": "6cca9ed7e76a774fd10525adad1ab89495f73e4b6fb9156f7a662af3278648ed"
+    },
+    {
+      "id": "dejong",
+      "title": "Аттрактор де Йонга",
+      "category": "Аттракторы",
+      "render_ms_48x16": 6.94,
+      "ink_cells": 452,
+      "fingerprint": "16226616d7c1d69807fba916984e156008d459734faede468489ec0394680ba5"
+    },
+    {
+      "id": "ikeda",
+      "title": "Аттрактор Икеды",
+      "category": "Аттракторы",
+      "render_ms_48x16": 7.97,
+      "ink_cells": 238,
+      "fingerprint": "77a87b9f185fa732dc275dd83ae8e4440e30b09471071b5f4afd70ae813fa322"
+    },
+    {
+      "id": "light_ribbons",
+      "title": "Световые ленты",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.45,
+      "ink_cells": 146,
+      "fingerprint": "c7b625d597379056dd17571b12c30ef7f078e742bf47279f70502cc2483c887c"
+    },
+    {
+      "id": "light_gyroscope",
+      "title": "Гироскоп света",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.33,
+      "ink_cells": 237,
+      "fingerprint": "dab3aab94f328cfd634bbaaf9455fde2c0054916b9ba1f99636e74d452f05c44"
+    },
+    {
+      "id": "light_silk",
+      "title": "Шёлковые волны",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.17,
+      "ink_cells": 172,
+      "fingerprint": "b5d347061fe9ab6a534e39031b9e54e942d075d907ef7bd2d3c2f827ba86dd6d"
+    },
+    {
+      "id": "light_bloom",
+      "title": "Световой цветок",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.32,
+      "ink_cells": 194,
+      "fingerprint": "a0e855a65bb81c6cabc568a908c9f657be183e0e4192b21115dc83edeb263e85"
+    },
+    {
+      "id": "light_gyroid",
+      "title": "Гироид",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.33,
+      "ink_cells": 163,
+      "fingerprint": "d6698e4f4393be1b64e205749348e60f3da14e23f77854c54742a52b3c671618"
+    },
+    {
+      "id": "light_chladni",
+      "title": "Фигуры Хладни",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 9.02,
+      "ink_cells": 313,
+      "fingerprint": "0e47a829dcb86d706d7e3123b65834f87435cbc3e7db16a85386f84af78dc5ac"
+    },
+    {
+      "id": "light_orbits",
+      "title": "Орбитальное плетение",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.37,
+      "ink_cells": 103,
+      "fingerprint": "714c1143821908540f06caabdee9bc06f404579953709f4abe964391e5887ea5"
+    },
+    {
+      "id": "light_resonance",
+      "title": "Резонансная чаша",
+      "category": "Световые скульптуры",
+      "render_ms_48x16": 2.22,
+      "ink_cells": 153,
+      "fingerprint": "a54bb1312631f16a22bbe9728e90197c9a215d43ab2365c43ec3592fd05ee033"
+    },
+    {
+      "id": "hopf_fibers",
+      "title": "Расслоение Хопфа",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.58,
+      "ink_cells": 300,
+      "fingerprint": "bcc7496d8a02875a9248cec4dfe0dc6ee36fbce221e2e05e41c134fed9317075"
+    },
+    {
+      "id": "nautilus_shell",
+      "title": "Раковина наутилуса",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.66,
+      "ink_cells": 186,
+      "fingerprint": "58ba2fe0e8759c2075be78119790172377f8fce91a6c4daeff1536de280d69ad"
+    },
+    {
+      "id": "luminous_heart",
+      "title": "Световое сердце",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 4.34,
+      "ink_cells": 110,
+      "fingerprint": "c02b09ad0607e6a2322680a85e3fe1402a1a723926928864289174356e2ce28c"
+    },
+    {
+      "id": "iris_filaments",
+      "title": "Радужная диафрагма",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.74,
+      "ink_cells": 159,
+      "fingerprint": "6f0cf818620c12d67953a28e662506241e7f6cf7c7e1abfda057996a7cfd51dc"
+    },
+    {
+      "id": "dune_contours",
+      "title": "Контуры дюн",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.63,
+      "ink_cells": 186,
+      "fingerprint": "5948dc2d1dd04df37d380eec80b2a2e10452ea4b4622f4a9f83cf13ca6cc86eb"
+    },
+    {
+      "id": "porcelain",
+      "title": "Фарфоровый сосуд",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.5,
+      "ink_cells": 206,
+      "fingerprint": "3738da5cb369ebd51020375485c93626ccbc5054c43f4cefbf5a2d623b457490"
+    },
+    {
+      "id": "nested_helix",
+      "title": "Спиральное гнездо",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 3.83,
+      "ink_cells": 133,
+      "fingerprint": "479e1fe1f57fb5ea735f659306296b0ad1fc2792911a0982c86fe22a584ce993"
+    },
+    {
+      "id": "phyllotaxis",
+      "title": "Филлотаксис",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 4.18,
+      "ink_cells": 183,
+      "fingerprint": "d1a7df57b6b293adb7dd1b599e308fe51c5822c984f09d248147f93a2698aea5"
+    },
+    {
+      "id": "fractal_flame",
+      "title": "Фрактальное пламя",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 6.13,
+      "ink_cells": 269,
+      "fingerprint": "ee5ddf0a0406c5f24f26f03af30f84c86727697dd3eaf6967812e1c63ff4c098"
+    },
+    {
+      "id": "water_caustics",
+      "title": "Подводный свет",
+      "category": "Генеративное искусство",
+      "render_ms_48x16": 0.66,
+      "ink_cells": 172,
+      "fingerprint": "90dae1efa4572529fd34f95eaae5a78b97e501a45303482d058a9db66a159de8"
+    },
+    {
+      "id": "dini_surface",
+      "title": "Поверхность Дини",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 3.99,
+      "ink_cells": 128,
+      "fingerprint": "c457ec9ff7450fef7202cae9664e5eaa8c87d6d959ce2d479f1eb96f37014d28"
+    },
+    {
+      "id": "enneper_surface",
+      "title": "Поверхность Эннепера",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 4.07,
+      "ink_cells": 137,
+      "fingerprint": "f9e3c4aec848385b9344fea8bbf2edf2fd3b8396b0b2b513ffef38fa1f6525d4"
+    },
+    {
+      "id": "helicoid_surface",
+      "title": "Геликоид",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 3.63,
+      "ink_cells": 252,
+      "fingerprint": "9b05907417f6c1a7c9e582fb8dc01c1f53e978ccbf7085a3534c9576c1f7ff83"
+    },
+    {
+      "id": "catenoid_surface",
+      "title": "Катеноид",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 3.5,
+      "ink_cells": 189,
+      "fingerprint": "f6b978fc413fb64c5ef0b484eadb55d595c6200ce3ecaa3b623bd7e6a4f2f77d"
+    },
+    {
+      "id": "astroid_surface",
+      "title": "Астроидальная сфера",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 4.59,
+      "ink_cells": 126,
+      "fingerprint": "12b435d1a7f2b5294b3f83a3aacaa3dc84068bda1dcd2eeb9298cb357f09c771"
+    },
+    {
+      "id": "roman_surface",
+      "title": "Римская поверхность",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 4.76,
+      "ink_cells": 170,
+      "fingerprint": "158d502ce621d54b47e38e836927d7ef82159dc0ebba11d78e886003ab975228"
+    },
+    {
+      "id": "crosscap_surface",
+      "title": "Кросс-кап",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 4.72,
+      "ink_cells": 238,
+      "fingerprint": "b9313d5475d130233b1dc39673314bc5f9418326bec7264c610903ec6b527085"
+    },
+    {
+      "id": "superellipsoid",
+      "title": "Суперэллипсоид",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 8.59,
+      "ink_cells": 198,
+      "fingerprint": "72441cd9a32ad9ac89d41206e385d603040160a55bca93c64430af6bba9e91d0"
+    },
+    {
+      "id": "cyclide_surface",
+      "title": "Циклида",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 7.05,
+      "ink_cells": 135,
+      "fingerprint": "64880a75fa7f215bcc5c0682273ab42bf543070412af6f11b8f6bb97f569bd3d"
+    },
+    {
+      "id": "saddle_surface",
+      "title": "Седло",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 6.44,
+      "ink_cells": 144,
+      "fingerprint": "c8c4ff8e12bf2e237bce41ed683482b43e237f1d24fb7fef718cf906243c8489"
+    },
+    {
+      "id": "conoid_surface",
+      "title": "Коноид",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 7.03,
+      "ink_cells": 186,
+      "fingerprint": "4cba6aa2c415d3ab35c641dda3c471387aed4f5ce2f6f370dc0a78807eaa3fc7"
+    },
+    {
+      "id": "seashell_fan",
+      "title": "Веер раковины",
+      "category": "Математические поверхности",
+      "render_ms_48x16": 8.95,
+      "ink_cells": 122,
+      "fingerprint": "10db71f8fecf4a10037cea3a7fbc492a70d573dc9a5c5b358151b5a158ab275d"
+    },
+    {
+      "id": "viviani_curve",
+      "title": "Кривая Вивиани",
+      "category": "Световые кривые",
+      "render_ms_48x16": 7.65,
+      "ink_cells": 42,
+      "fingerprint": "8cce05291371a8e48a4ce7129a216363aee6fe629cc5041c0aa56ac4573d3f21"
+    },
+    {
+      "id": "clelia_curve",
+      "title": "Кривая Клелии",
+      "category": "Световые кривые",
+      "render_ms_48x16": 6.42,
+      "ink_cells": 239,
+      "fingerprint": "d609cc90d48fb0d9b00bb445539c5a14c52b56c8b70cd2700f82e4c348c379f9"
+    },
+    {
+      "id": "spherical_spiral",
+      "title": "Сферическая спираль",
+      "category": "Световые кривые",
+      "render_ms_48x16": 6.49,
+      "ink_cells": 306,
+      "fingerprint": "a59d1b87ab5a7c90fb98efaa5f30b13933f958e10569127f135581ff95a40103"
+    },
+    {
+      "id": "butterfly_curve",
+      "title": "Кривая-бабочка",
+      "category": "Световые кривые",
+      "render_ms_48x16": 6.72,
+      "ink_cells": 43,
+      "fingerprint": "0ee4c5611c3098d960116ac2944a51dfc75cb526672f2a5d3e901e0916dda18f"
+    },
+    {
+      "id": "epicycloid_curve",
+      "title": "Эпициклоида",
+      "category": "Световые кривые",
+      "render_ms_48x16": 5.87,
+      "ink_cells": 41,
+      "fingerprint": "94c24b291c68e9b2039f6a4679db770737b6bc731d179ca11851bfe3f6783c77"
+    },
+    {
+      "id": "hypocycloid_curve",
+      "title": "Гипоциклоида",
+      "category": "Световые кривые",
+      "render_ms_48x16": 5.3,
+      "ink_cells": 42,
+      "fingerprint": "a3281229ee85b13d3489599f1b8bc21f5979357e2b5c0cc344db7a85864ee275"
+    },
+    {
+      "id": "cochleoid_curve",
+      "title": "Кохлеоида",
+      "category": "Световые кривые",
+      "render_ms_48x16": 4.84,
+      "ink_cells": 25,
+      "fingerprint": "78e27af5c4d32c815249fa0bc39833dc1b77b25b6af4b40ea00b099842bd0c3f"
+    },
+    {
+      "id": "tractrix_curve",
+      "title": "Трактриса",
+      "category": "Световые кривые",
+      "render_ms_48x16": 4.39,
+      "ink_cells": 42,
+      "fingerprint": "7b2c32094d9099aeca60d1d9f70750a537a9c7f15df3b7a7442ff8141bbac98c"
+    },
+    {
+      "id": "involute_curve",
+      "title": "Эвольвента",
+      "category": "Световые кривые",
+      "render_ms_48x16": 4.19,
+      "ink_cells": 46,
+      "fingerprint": "81b8c9d7dd0b7b97414d2750f2d08e1bcf86f358ec36e48552d061da8b519afb"
+    },
+    {
+      "id": "cardioid_braid",
+      "title": "Кардиоидная коса",
+      "category": "Световые кривые",
+      "render_ms_48x16": 4.09,
+      "ink_cells": 56,
+      "fingerprint": "c0d2793bee6944ef374164288d61d80d6a36c9f48cffbb0b11c08257d8aaca0b"
+    },
+    {
+      "id": "folium_curve",
+      "title": "Лист Декарта",
+      "category": "Световые кривые",
+      "render_ms_48x16": 3.62,
+      "ink_cells": 41,
+      "fingerprint": "c07d32918300cc90b6c54f0c20cce4a807b44926a1a30f439cd45ef36fe924ab"
+    },
+    {
+      "id": "fermat_spiral",
+      "title": "Спираль Ферма",
+      "category": "Световые кривые",
+      "render_ms_48x16": 3.68,
+      "ink_cells": 89,
+      "fingerprint": "28767dc62fe4816aa5e221eb4cf9b9a6047cdb471bfa5dc9d875081938cb6556"
+    },
+    {
+      "id": "hopalong_map",
+      "title": "Hopalong",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 12.71,
+      "ink_cells": 117,
+      "fingerprint": "fbd71bf4fe678ec56d8a56c0b1477d5db9ca60b818bb974ab448296f94763b81"
+    },
+    {
+      "id": "bedhead_map",
+      "title": "Bedhead",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 13.75,
+      "ink_cells": 77,
+      "fingerprint": "f751c2e851a0f072e56b7d1787fa6805cb21582ca4371fc3d2ae28b025527086"
+    },
+    {
+      "id": "gumowski_map",
+      "title": "Гумовский—Мира",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 12.13,
+      "ink_cells": 80,
+      "fingerprint": "da2a7c47f147687f09c79dd03af4a57ca02d485bab17dad5d49e3b70108e1044"
+    },
+    {
+      "id": "gingerbread_map",
+      "title": "Пряничное отображение",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 10.63,
+      "ink_cells": 102,
+      "fingerprint": "fa6bee031239863a6d15fd01c2569f9ee5c337206bc38ffe195a5552df5fac7a"
+    },
+    {
+      "id": "henon_map",
+      "title": "Отображение Эно",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 10.93,
+      "ink_cells": 66,
+      "fingerprint": "a9814792f6d2af63483899b385643fba9d5d200ae60690ce766f8c59acc7e8bd"
+    },
+    {
+      "id": "tinkerbell_map",
+      "title": "Тинкербелл",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 11.36,
+      "ink_cells": 81,
+      "fingerprint": "19fe06434dbaea2f73f7748707e4fdce1de1be4c3aa626ee0ab7bf083b6050b3"
+    },
+    {
+      "id": "standard_map",
+      "title": "Стандартное отображение",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 10.77,
+      "ink_cells": 101,
+      "fingerprint": "87a7f292e148a8be2592819a0751b39f19fb39fab5847bdc17bcea5ed494f11b"
+    },
+    {
+      "id": "popcorn_map",
+      "title": "Popcorn",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 11.04,
+      "ink_cells": 88,
+      "fingerprint": "2eff905fffeedbfa484868578642487e7fff1e2fbd5b7217d066ab503c8fe1e2"
+    },
+    {
+      "id": "sine_lattice",
+      "title": "Синусная решётка",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 10.68,
+      "ink_cells": 29,
+      "fingerprint": "b61eaaa25fd90db26b2869bb32d163b5c7e5e2975562666238f7caab7fdace90"
+    },
+    {
+      "id": "swirl_ifs",
+      "title": "Спиральный IFS",
+      "category": "Хаотические карты",
+      "render_ms_48x16": 11.35,
+      "ink_cells": 139,
+      "fingerprint": "3431c749966ed8d035dd3150f6b004f5b7d4cdc0745063e66b2a809af80df764"
+    },
+    {
+      "id": "domain_warp",
+      "title": "Искажение пространства",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.27,
+      "ink_cells": 637,
+      "fingerprint": "f249b822fb6ff02fd967ce424431e6359beabda7d1ca11cf3a53f3ad39301869"
+    },
+    {
+      "id": "ridged_field",
+      "title": "Горные гребни",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.81,
+      "ink_cells": 683,
+      "fingerprint": "b7639524c0330c2e8c5548b59a59a3e59d6b7a0dd9ff0aece19f28f2bcf2130f"
+    },
+    {
+      "id": "fbm_clouds",
+      "title": "Облачный атлас",
+      "category": "Оптические поля",
+      "render_ms_48x16": 2.77,
+      "ink_cells": 768,
+      "fingerprint": "915f04a886192c19d102b8beac631970c10bbef05447f9d8f0a0dbacad642216"
+    },
+    {
+      "id": "voronoi_edges",
+      "title": "Границы Вороного",
+      "category": "Оптические поля",
+      "render_ms_48x16": 2.5,
+      "ink_cells": 138,
+      "fingerprint": "28b4a3063f5d8eca4ee33db38bd1469321fc578a114f81a2382f1cf053b2339d"
+    },
+    {
+      "id": "voronoi_glass",
+      "title": "Цветное стекло",
+      "category": "Оптические поля",
+      "render_ms_48x16": 2.38,
+      "ink_cells": 747,
+      "fingerprint": "8431da8163cedc703050007673b0b27f1d1ec2882110e121e8c5d04ab93e2d26"
+    },
+    {
+      "id": "electric_filaments",
+      "title": "Электрические нити",
+      "category": "Оптические поля",
+      "render_ms_48x16": 2.03,
+      "ink_cells": 92,
+      "fingerprint": "7a377ea71625c07ba35649fa3a9ceba874cc442ca71ab364d665a245ef8f91ec"
+    },
+    {
+      "id": "lens_array",
+      "title": "Массив линз",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.05,
+      "ink_cells": 584,
+      "fingerprint": "0a66cb53ca5f9d68bb2204eef2a59be57882c4421fae4018cb9dd5a239498284"
+    },
+    {
+      "id": "hex_pulse",
+      "title": "Пульсирующие соты",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.14,
+      "ink_cells": 146,
+      "fingerprint": "f84d91ddf5f0fa152826daf291aced83cdd0ec2c91c12ae75912293d97448a28"
+    },
+    {
+      "id": "prism_fan",
+      "title": "Призматический веер",
+      "category": "Оптические поля",
+      "render_ms_48x16": 0.81,
+      "ink_cells": 587,
+      "fingerprint": "6ecce09de9699dd75edd3f9ba85b78ad15ab2c8ca7cc66813f584fdd50d2fff3"
+    },
+    {
+      "id": "moire_spokes",
+      "title": "Радиальный муар",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.3,
+      "ink_cells": 705,
+      "fingerprint": "782b651e6b420e50349b82081ec679a022e64d00e740cf3e328d24c371002e6e"
+    },
+    {
+      "id": "chromatic_waves",
+      "title": "Хроматические волны",
+      "category": "Оптические поля",
+      "render_ms_48x16": 0.94,
+      "ink_cells": 741,
+      "fingerprint": "b3e2afedc9b12f76d9e2a37b407bf84f4e0ad42dac334a1178ffebb304d0f2a3"
+    },
+    {
+      "id": "marble_veins",
+      "title": "Мраморные жилы",
+      "category": "Оптические поля",
+      "render_ms_48x16": 1.12,
+      "ink_cells": 110,
+      "fingerprint": "0a1613628a8b3b6c71c665fae7cdc150dad3ffe4dcff0ef503d92d1a8f39f863"
+    },
+    {
+      "id": "flurry_streams",
+      "title": "Flurry · потоки",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.46,
+      "ink_cells": 116,
+      "fingerprint": "f6fa541f39d20a9199e8abaadc4791f0b04c3f2f159142f1186354e79cb7824f"
+    },
+    {
+      "id": "galaxy_collision",
+      "title": "Столкновение галактик",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.53,
+      "ink_cells": 145,
+      "fingerprint": "2e0d0f4e45c3ef6d7b67f4043e854beae8b983c8a8f69084b872d520c6956c64"
+    },
+    {
+      "id": "solar_wind",
+      "title": "Солнечный ветер",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.41,
+      "ink_cells": 305,
+      "fingerprint": "ce2426c65372558372c811271ea044dd83587b71acfe654b606179ed9e1d9eb8"
+    },
+    {
+      "id": "rain_curtain",
+      "title": "Дождевая завеса",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.37,
+      "ink_cells": 558,
+      "fingerprint": "d2d5f73655ab1373b98530dcdac51b87afd67133c9e594ea93642bc36bd97b1e"
+    },
+    {
+      "id": "bokeh_drift",
+      "title": "Дрейф боке",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.59,
+      "ink_cells": 40,
+      "fingerprint": "9aa6f4c6766cbf8923e47ee0ce69c550c45449fb5b5bdefb88396ab5a4ca3998"
+    },
+    {
+      "id": "magnetic_bottle",
+      "title": "Магнитная ловушка",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.47,
+      "ink_cells": 185,
+      "fingerprint": "d63a2bcd8949c88884973cb48a1262b75f8ba50567e808a39a3623bbeac709d1"
+    },
+    {
+      "id": "beam_splitter",
+      "title": "Расщепление луча",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.41,
+      "ink_cells": 131,
+      "fingerprint": "d48a7c7cdd1496bec3aa7770fc380141de7b12e1abf03c6644bda1505b01cae0"
+    },
+    {
+      "id": "cloud_chamber",
+      "title": "Камера частиц",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.73,
+      "ink_cells": 65,
+      "fingerprint": "c6f2275fb3018f45346621870c010ea0b1f53bf24bfb61788972e04ee410ddab"
+    },
+    {
+      "id": "granular_rings",
+      "title": "Пылевые кольца",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.52,
+      "ink_cells": 144,
+      "fingerprint": "8bc8a1614318159b204d39d92b20de61eb6514c7f5f1100dc7c560e9c8862e28"
+    },
+    {
+      "id": "levitating_dust",
+      "title": "Левитирующая пыль",
+      "category": "Потоки и орбиты",
+      "render_ms_48x16": 2.56,
+      "ink_cells": 182,
+      "fingerprint": "74d706fe3a40a5fa11e15e1ca70befd8af8e2b6a192390f70e0897de85e31e66"
+    },
+    {
+      "id": "rotozoom",
+      "title": "Ротозум",
+      "category": "Демосцена",
+      "render_ms_48x16": 1.32,
+      "ink_cells": 656,
+      "fingerprint": "899dbb6d429dd3924abf64e8866b28834202a45b55d4df1adae6bc71ed666c92"
+    },
+    {
+      "id": "twister",
+      "title": "Твистер",
+      "category": "Демосцена",
+      "render_ms_48x16": 0.56,
+      "ink_cells": 80,
+      "fingerprint": "15b9993ba879587d75ae377a8930e778387134360cc6642204fdd0d4cbe7e86d"
+    },
+    {
+      "id": "shadebobs",
+      "title": "Shadebobs",
+      "category": "Демосцена",
+      "render_ms_48x16": 8.77,
+      "ink_cells": 124,
+      "fingerprint": "0a2b47c3e486c81cc3367d3a5a029774a14041b5b46c336ec627f4c86208447b"
+    },
+    {
+      "id": "vectorballs",
+      "title": "Векторные шары",
+      "category": "Демосцена",
+      "render_ms_48x16": 3.88,
+      "ink_cells": 150,
+      "fingerprint": "836e54039aaca98e13548ff6e6763a6e5016803a51fd7d785cc8672b309b4597"
+    },
+    {
+      "id": "rasterbars",
+      "title": "Растровые полосы",
+      "category": "Демосцена",
+      "render_ms_48x16": 1.82,
+      "ink_cells": 336,
+      "fingerprint": "4d37866727ad24383ed1293034fa54a68f484de579be7dc82b9e40d679af361e"
+    },
+    {
+      "id": "copperwaves",
+      "title": "Медные волны",
+      "category": "Демосцена",
+      "render_ms_48x16": 0.78,
+      "ink_cells": 537,
+      "fingerprint": "4e35d6fcf2937fdece38bc9fec7f0469a77f7f599fee36c924da9f9fc1ea0479"
+    },
+    {
+      "id": "dot_tunnel",
+      "title": "Точечный тоннель",
+      "category": "Демосцена",
+      "render_ms_48x16": 1.5,
+      "ink_cells": 711,
+      "fingerprint": "c3411e5098d0f78fdef2551d7dee4177039bd6cef314f342bde80f35934ae4e0"
+    },
+    {
+      "id": "wire_city",
+      "title": "Каркасный мегаполис",
+      "category": "Демосцена",
+      "render_ms_48x16": 6.79,
+      "ink_cells": 136,
+      "fingerprint": "be777699bd0d09310d837e7eb793f61f4644467bf111a3f4c54a42e591f1ff3f"
+    },
+    {
+      "id": "truchet_tiles",
+      "title": "Плитки Трюше",
+      "category": "Орнаменты",
+      "render_ms_48x16": 6.22,
+      "ink_cells": 225,
+      "fingerprint": "f7b8ea032936d54e20e58855f689ec2da425ed31716761786258a14d916d9256"
+    },
+    {
+      "id": "star_tessellation",
+      "title": "Звёздная мозаика",
+      "category": "Орнаменты",
+      "render_ms_48x16": 6.1,
+      "ink_cells": 409,
+      "fingerprint": "2cbb5627b1cfa856b2bf7143cef93cc5e29f0a27ff64a7c482b0bae92ce07c33"
+    },
+    {
+      "id": "guilloche",
+      "title": "Гильоше",
+      "category": "Орнаменты",
+      "render_ms_48x16": 10.49,
+      "ink_cells": 180,
+      "fingerprint": "77162eb329ff6a6d1806812c27a67e0aaa000278c57f432f17a018c063b73f64"
+    },
+    {
+      "id": "braided_grid",
+      "title": "Плетёная сетка",
+      "category": "Орнаменты",
+      "render_ms_48x16": 11.83,
+      "ink_cells": 345,
+      "fingerprint": "03c34bd5c6c210911cfbdc2e1f4507d701f97965aea62fe4a968033d558d6a86"
+    },
+    {
+      "id": "hex_lattice",
+      "title": "Шестигранная решётка",
+      "category": "Орнаменты",
+      "render_ms_48x16": 8.4,
+      "ink_cells": 375,
+      "fingerprint": "2e757c745ca16e5d524cd5814a735af9efa050ff7c852603d53a35fea835d1cf"
+    },
+    {
+      "id": "circle_packing",
+      "title": "Круговая упаковка",
+      "category": "Орнаменты",
+      "render_ms_48x16": 7.87,
+      "ink_cells": 335,
+      "fingerprint": "f0970e9765046dc20a53da7f4536155e90dba5802b6c55c3b0300faf1812b7f6"
+    }
+  ]
+}

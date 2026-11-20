@@ -17,26 +17,19 @@ import time
 
 from .core import add_source, available, check_update, load_apps
 from .appearance import konsole_profile
-from .visuals.effects import Scene
+from .brand import logo as wordmark
+SPLASH_DURATION=1.35
+from .backgrounds import Background, Scene, PREFERRED
 
-EFFECTS = ['stars', 'snow', 'rain', 'particles', 'matrix', 'pipes', 'sakura', 'aquarium', 'donut']
-LOGO = [
-    '        ████████                ██         ',
-    ' ▀▄        ██                   ██         ',
-    '   ▀▄      ██   ▄████▄  ▄████▄  ██  ▄█████ ',
-    '    ▄▀  █  ██   ██  ██  ██  ██  ██  ▀██▄   ',
-    '  ▄▀   ▀█▀ ██   ██  ██  ██  ██  ██     ▀██ ',
-    ' ▀      █  ██   ▀████▀  ▀████▀  ██  █████▀ ',
-    '        ▀▄▄━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ',
-]
-# Per-app selection: accent, a dark tinted background, and basic-color fallback.
+EFFECTS = list(PREFERRED)
+# Per-app accents; all backgrounds follow the terminal default.
 APP_STYLES = {
-    'spotify': (42, 22, curses.COLOR_GREEN),
-    'soundcloud': (208, 94, curses.COLOR_YELLOW),
-    'youtube': (196, 52, curses.COLOR_RED),
-    'telegram': (75, 17, curses.COLOR_BLUE),
-    'vpn': (141, 54, curses.COLOR_MAGENTA),
-    'things': (199, 53, curses.COLOR_MAGENTA),
+    'spotify': (42, -1, curses.COLOR_GREEN),
+    'soundcloud': (208, -1, curses.COLOR_YELLOW),
+    'youtube': (196, -1, curses.COLOR_RED),
+    'telegram': (75, -1, curses.COLOR_BLUE),
+    'vpn': (141, -1, curses.COLOR_MAGENTA),
+    'things': (199, -1, curses.COLOR_MAGENTA),
 }
 
 def selection_pairs(app_id):
@@ -51,7 +44,7 @@ def selection_pairs(app_id):
 DESCRIPTIONS = {'tvpn':'Защищённое соединение', 'tspotify':'Музыка и ваша библиотека', 'ttelegram':'Сообщения и каналы', 'tthings':'Эффекты и системные инструменты'}
 
 class UI:
-    def __init__(self, screen, splash=True):
+    def __init__(self, screen, splash=True, motion=True, effect=None, low_power=False):
         self.s = screen
         self.apps, self.errors = load_apps()
         self.selected = 0
@@ -63,9 +56,11 @@ class UI:
         self.pool = ThreadPoolExecutor(max_workers=2)
         self.started = time.monotonic()
         self.splash = splash
-        self.new_effect()
+        self.background=Background(motion=motion,effect=effect,low_power=low_power)
+        self.effect=self.background.effect
+        self._paint_cache={}
         self.colors()
-        self.s.timeout(60)
+        self.s.timeout(80)
         try:
             curses.curs_set(0)
         except curses.error:
@@ -74,39 +69,48 @@ class UI:
         self.check_updates()
 
     def new_effect(self):
-        choices = [n for n in EFFECTS if n != getattr(self, 'effect', '')]
-        self.effect = random.choice(choices)
-        self.scene = Scene(self.effect)
-        self.effect_start = time.monotonic()
-        self.next_effect = self.effect_start + random.uniform(30, 120)
+        self.background.change()
+        self.effect=self.background.effect
 
     def colors(self):
         curses.start_color()
         curses.use_default_colors()
-        # Explicit indexed RGB palette: never redefine ANSI colors with OSC 4.
-        # Default background (-1) lets Konsole's compositor opacity show through.
-        if curses.COLORS >= 256:
-            pairs = [(255,-1),(245,-1),(42,-1),(75,-1),
-                     (255,236),(42,236),(235,-1),(237,-1)]
+        # Default foreground/background follow the terminal's own light/dark theme.
+        # Never switch profiles or redefine the terminal's palette.
+        if curses.COLORS>=256:
+            pairs=[(-1,-1),(245,-1),(42,-1),(69,-1),
+                   (-1,-1),(42,-1),(69,-1),(132,-1)]
         else:
-            pairs = [(7,-1),(7,-1),(2,-1),(6,-1),
-                     (7,0),(2,0),(0,-1),(0,-1)]
-        for idx, (fg,bg) in enumerate(pairs, 1):
-            curses.init_pair(idx, fg,bg)
-        for index, (accent, background, fallback) in enumerate(APP_STYLES.values()):
-            if curses.COLORS < 256:
-                accent, background = fallback, curses.COLOR_BLACK
-            curses.init_pair(9+index*2, accent, background)
-            curses.init_pair(10+index*2, 255 if curses.COLORS >= 256 else curses.COLOR_WHITE, background)
+            pairs=[(-1,-1),(-1,-1),(2,-1),(4,-1),
+                   (-1,-1),(2,-1),(4,-1),(5,-1)]
+        for idx,(fg,bg) in enumerate(pairs,1):curses.init_pair(idx,fg,bg)
+        for index,(accent,_,fallback) in enumerate(APP_STYLES.values()):
+            fg=accent if curses.COLORS>=256 else fallback
+            curses.init_pair(9+index*2,fg,-1)
+            curses.init_pair(10+index*2,-1,-1)
         self.s.bkgd(' ', curses.color_pair(1))
 
     def put(self,y,x,text,pair=1,bold=False):
-        h,w = self.s.getmaxyx()
-        if 0 <= y < h and 0 <= x < w-1:
-            try:
-                self.s.addnstr(y,x,str(text),w-x-1,curses.color_pair(pair)|(curses.A_BOLD if bold else 0))
-            except curses.error:
-                pass
+        h,w=self.s.getmaxyx()
+        if 0<=y<h and 0<=x<w-1:
+            for offset,char in enumerate(str(text)[:w-x-1]):
+                self._pending[(y,x+offset)]=(char,pair,bold)
+
+    def flush(self):
+        previous=getattr(self,'_paint_cache',{})
+        current=self._pending
+        changed=sorted(key for key in previous.keys()|current.keys() if previous.get(key)!=current.get(key))
+        index=0
+        while index<len(changed):
+            y,x=changed[index];char,pair,bold=current.get((y,x),(' ',1,False));text=char;index+=1
+            while index<len(changed):
+                ny,nx=changed[index];cell=current.get((ny,nx),(' ',1,False))
+                if ny!=y or nx!=x+len(text) or cell[1:]!=(pair,bold):break
+                text+=cell[0];index+=1
+            try:self.s.addnstr(y,x,text,len(text),curses.color_pair(pair)|(curses.A_BOLD if bold else 0))
+            except curses.error:pass
+        self._paint_cache=current.copy()
+        self.s.refresh()
 
     def check_updates(self):
         for app in self.apps:
@@ -120,52 +124,67 @@ class UI:
 
     def draw(self):
         now = time.monotonic()
-        if now > self.next_effect:
-            self.new_effect()
         for app_id, job in list(self.jobs.items()):
             if job.done():
                 self.updates[app_id] = job.result()
                 del self.jobs[app_id]
         if now-self.last_check > 3600:
             self.check_updates()
-        self.s.erase()
+        self._pending={}
         h,w = self.s.getmaxyx()
+        if getattr(self,'_last_size',None)!=(h,w):
+            self.s.erase();self._paint_cache={};self._last_size=(h,w)
         if h < 18 or w < 64:
             self.put(0,0,'ttools · увеличьте терминал до 64 × 18',3)
             self.put(2,0,'Q — выход')
-            self.s.refresh()
+            self.flush()
             return
-        # Render real tthings scenes in a small grid; recolor to a muted palette.
-        frame = self.scene.render(min(w-2,110),min(h,40),now-self.effect_start)
-        ox = max(0,(w-frame.w)//2)
+        frame=self.background.render(w-2,h,now)
+        self.effect=self.background.effect
+        ox=max(0,(w-frame.w)//2);oy=max(0,(h-frame.h)//2)
+        age=now-self.started
+        showing_splash=self.splash and age<SPLASH_DURATION
+        left=max(3,round(w*.045))
+        roomy=w>=100 and h>=34
+        menu_width=min(62,max(42,round(w*.47))) if w>=100 else min(104,w-left*2)
         for y,row in enumerate(frame.cells):
-            for x,(ch,_) in enumerate(row):
-                if ch != ' ':
-                    self.put(y,x+ox,ch,7 if (x+y)%4 else 8)
-        age = now-self.started
-        if self.splash and age < 1.15:
-            shade = 7 if age < .15 or age > 1.02 else (4 if age < .35 else 3)
-            for i,line in enumerate(LOGO):
-                self.put(h//2-len(LOGO)//2+i,(w-max(map(len,LOGO)))//2,line,shade,True)
-            self.put(h//2+len(LOGO)//2+2,(w-21)//2,'YOUR TOOLS. ONE PLACE.',2)
-            self.s.refresh()
+            for x,(char,color) in enumerate(row):
+                sx,sy=x+ox,y+oy
+                quiet=(not showing_splash and 2<=sy<h-5 and left<=sx<left+menu_width)
+                if char!=' ' and not quiet:self.put(sy,sx,char,8 if color=='#c96a98' else 7)
+        if showing_splash:
+            width=max(24,min(84,round(w*.42)))
+            lines=wordmark(width)
+            top=max(2,round(h*.075))
+            shade=1
+            for i,line in enumerate(lines):self.put(top+i,left,line,shade)
+            text_y=min(h-9,top+len(lines)+max(1,h//20))
+            self.put(text_y,left,'Всё важное',1,True)
+            self.put(text_y+2,left,'в вашем терминале.',1,True)
+            self.put(h-5,left,'─'*max(1,w-left*2-1),2)
+            self.put(h-3,left,'TTOOLS / ASCII WORKSPACE',1)
+            self.put(h-3,max(left,w-left-19),'200 FX + 19 TOOLS',4)
+            self.flush()
             return
-        left = max(3,(w-104)//2)
-        width = min(w-left*2,104)
-        self.put(2,left,'> tTools▁',3,True)
-        self.put(2,left+width-22,time.strftime('%H:%M')+'  /  WORKSPACE',2)
-        self.put(4,left,'Ваши инструменты',1,True)
-        self.put(5,left,'Один вход. Всё под рукой.',2)
-        self.put(7,left,'⌕  '+(self.query or 'Поиск приложений…')+(' ▏' if self.searching else ''),4)
-        self.put(9,left,'БИБЛИОТЕКА',2,True)
+        width=menu_width
+        header=wordmark(min(58,width-2,max(20,int((h-26)/.19)))) if roomy else ()
+        extra=max(7,len(header)-1) if roomy else 0
+        if roomy:
+            for row,line in enumerate(header):self.put(2+row,left,line,1)
+        else:self.put(2,left,'tTools_',1,True)
+        self.put(2,max(left+width+2,w-24),time.strftime('%H:%M')+' / КОЛЛЕКЦИЯ',2)
+        self.put(4+extra,left,'Всё важное в вашем терминале.',1,True)
+        if not roomy:self.put(5,left,'Музыка, сообщения и немного движения.',2)
+        self.put(7+extra,left,('⌕ '+(self.query or 'Поиск приложений…')+(' ▏' if self.searching else ''))[:width-1],4)
+        self.put(9+extra,left,'ПРИЛОЖЕНИЯ / '+str(len(self.apps)).zfill(2),2,True)
         apps = self.filtered()
         self.selected = min(self.selected,max(0,len(apps)-1))
-        count = max(1,(h-15)//3)
+        count = max(1,(h-15-extra)//3)
         start = max(0,self.selected-count+1)
         self.visible = []
         for offset,app in enumerate(apps[start:start+count]):
             index = start+offset
-            y = 11+offset*3
+            y = 11+extra+offset*3
             selected = index == self.selected
             accent_pair, row_pair = selection_pairs(app['id'])
             self.visible.append((y,index))
@@ -177,15 +196,23 @@ class UI:
             self.put(y,left+1,('▎ ' if selected else '  ')+f'{index+1:02}  '+title,accent_pair if selected else 1,True)
             badge = 'ENTER  →' if selected and ready else ('НЕТ КОМАНДЫ' if not ready else 'ГОТОВО')
             self.put(y,left+width-len(badge)-2,badge,accent_pair if selected else 2)
-            detail = DESCRIPTIONS.get(app['id'],app.get('description','Приложение'))
-            self.put(y+1,left+7,detail[:max(1,width//2-6)],row_pair if selected else 2)
-            self.put(y+1,left+width//2,self.updates.get(app['id'],'')[:width//2-2],row_pair if selected else 2)
+            detail=DESCRIPTIONS.get(app['id'],app.get('description','Приложение'))
+            update=self.updates.get(app['id'],'')
+            if app.get('suite_managed'):update='v'+app.get('version','')
+            elif update.startswith('Проверка недоступна'):update='Не проверено'
+            elif update=='Нет источника обновлений':update='—'
+            update=update[:max(1,width//2-2)]
+            update_x=left+width-len(update)-2
+            limit=max(1,update_x-left-9)
+            if len(detail)>limit:detail=detail[:max(0,limit-1)]+'…'
+            self.put(y+1,left+7,detail,row_pair if selected else 2)
+            self.put(y+1,update_x,update,row_pair if selected else 2)
         if not apps:
-            self.put(11,left,'Ничего не найдено' if self.apps else 'Подключите папку: ttools --import ПУТЬ',2)
+            self.put(11+extra,left,'Ничего не найдено' if self.apps else 'Подключите папку: ttools --import ПУТЬ',2)
         self.put(h-4,left,self.status[:width],4)
         self.put(h-2,left,'↑↓ выбор  Enter запуск  / поиск  U обновления  R каталог  Q выход',2)
-        self.put(h-1,left,f'Фон: {self.effect} · N сменить · автосмена 30–120 с',2)
-        self.s.refresh()
+        self.put(h-1,left,'N сменить фон  Space '+('продолжить' if self.background.paused else 'пауза'),2)
+        self.flush()
 
     def launch(self,app):
         if not available(app):
@@ -233,10 +260,11 @@ class UI:
                 signal.signal(sig,handler)
             curses.reset_prog_mode()
             self.colors()
-            self.s.timeout(60)
+            self.s.timeout(80)
             self.s.keypad(True)
             curses.flushinp()
             self.s.clear()
+            self._paint_cache={}
 
     def run(self):
         try:
@@ -245,6 +273,9 @@ class UI:
                 try:
                     key = self.s.get_wch()
                 except curses.error:
+                    continue
+                if self.splash and time.monotonic()-self.started<SPLASH_DURATION and key not in ('q','Q','й','Й','\x11','\x1b',curses.KEY_RESIZE):
+                    self.splash=False
                     continue
                 if self.searching:
                     if key in ('\n','\r','\x1b'):
@@ -263,6 +294,8 @@ class UI:
                     self.selected = min(max(0,len(self.filtered())-1),self.selected+1)
                 elif key == '/':
                     self.searching = True
+                elif key==' ':
+                    self.background.toggle()
                 elif key in ('n','N','т','Т'):
                     self.new_effect()
                 elif key in ('u','U','г','Г'):
@@ -297,6 +330,9 @@ def main():
     parser.add_argument('--list',action='store_true',help='Показать приложения без интерфейса')
     parser.add_argument('--check-updates',action='store_true')
     parser.add_argument('--no-splash',action='store_true')
+    parser.add_argument('--background',choices=EFFECTS,help='Выбрать спокойную сцену tthings')
+    parser.add_argument('--low-power',action='store_true',help='Меньше область фона и не более 4 кадров/с')
+    parser.add_argument('--no-motion',action='store_true',help='Оставить фон неподвижным')
     from . import __version__
     parser.add_argument('--version',action='version',version=__version__)
     args = parser.parse_args()
@@ -320,7 +356,7 @@ def main():
     locale.setlocale(locale.LC_ALL,'')
     try:
         with konsole_profile():
-            curses.wrapper(lambda screen: UI(screen,not args.no_splash).run())
+            curses.wrapper(lambda screen: UI(screen,not args.no_splash,not args.no_motion,args.background,args.low_power).run())
     except KeyboardInterrupt:
         pass
 
