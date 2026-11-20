@@ -12,6 +12,9 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import urllib.error
+import re
+import xml.etree.ElementTree as ET
 import urllib.parse
 import urllib.request
 import venv
@@ -45,6 +48,36 @@ def read(url,limit):
         data=response.read(limit+1)
         if len(data)>limit:raise ValueError('Download too large')
         return data
+
+def release_manifest(preview=False, tag=None):
+    """Discover suite assets without requiring a GitHub API quota."""
+    if tag:
+        tags=[tag]
+    else:
+        feed=ET.fromstring(read(f'https://github.com/{REPO}/releases.atom',2*1024*1024))
+        tags=[]
+        prefix=f'https://github.com/{REPO}/releases/tag/'
+        for entry in feed.findall('{http://www.w3.org/2005/Atom}entry'):
+            for link in entry.findall('{http://www.w3.org/2005/Atom}link'):
+                href=link.get('href','')
+                if href.startswith(prefix):
+                    candidate=urllib.parse.unquote(href[len(prefix):])
+                    if re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc|preview)\.\d+)?',candidate):
+                        if preview or '-' not in candidate:tags.append(candidate)
+    for candidate in tags:
+        url=f'https://github.com/{REPO}/releases/download/{urllib.parse.quote(candidate,safe="")}/suite-update.json'
+        try:
+            manifest=json.loads(read(url,2*1024*1024))
+        except urllib.error.HTTPError as error:
+            if error.code==404 and not tag:continue
+            raise
+        if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':
+            raise ValueError('Invalid update manifest')
+        if manifest.get('version')!=candidate.removeprefix('v'):
+            raise ValueError('Release tag/version mismatch')
+        return manifest
+    raise RuntimeError('No published suite release in this channel')
+
 
 def target_platform():
     system={'Linux':'linux','Darwin':'macos','Windows':'windows'}.get(platform.system())
@@ -103,13 +136,7 @@ def main():
     elif os.name=='nt':prefix=Path(os.environ['LOCALAPPDATA'])/'ttools'
     elif platform.system()=='Darwin':prefix=Path.home()/'Library/Application Support/ttools'
     else:prefix=Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'ttools-suite'
-    endpoint=f'https://api.github.com/repos/{REPO}/releases'+('/tags/'+args.release if args.release else '?per_page=10')
-    data=json.loads(read(endpoint,2*1024*1024))
-    releases=[data] if args.release else data
-    release=next((r for r in releases if not r.get('draft') and (args.preview or not r.get('prerelease')) and any(a['name']=='suite-update.json' for a in r.get('assets',[]))),None)
-    if not release:raise RuntimeError('No published suite release in this channel')
-    manifest_asset=next(a for a in release['assets'] if a['name']=='suite-update.json')
-    manifest=json.loads(read(manifest_asset['browser_download_url'],2*1024*1024))
+    manifest=release_manifest(args.preview,args.release)
     if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
     artifact=next((a for a in manifest['artifacts'] if a['platform']==target),None)
     if not artifact:raise RuntimeError('No release for '+target)
