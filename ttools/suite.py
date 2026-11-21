@@ -12,8 +12,8 @@ import tempfile
 import time
 import venv
 
-from .distribution import (REPOSITORY, atomic_json, digest, extract_zip, fetch, locked,
-                           platform_id, prefix_path, read_remote_json, verify_bundle, version_key, configure_text_io)
+from .distribution import (atomic_json, digest, extract_zip, fetch, latest_suite_manifest, locked,
+                           platform_id, prefix_path, verify_bundle, version_key, configure_text_io)
 
 NATIVE_TRAMPOLINE = "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')"
 APP_IDS = ('tspotify','ttelegram','tthings','tvpn')
@@ -272,15 +272,8 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
 
 
 def release_manifest():
-    releases=read_remote_json(f'https://api.github.com/repos/{REPOSITORY}/releases?per_page=10')
-    for release in releases:
-        if release.get('draft'):continue
-        # Stable channel: prereleases are explicitly opt-in.
-        if release.get('prerelease') and os.environ.get('TTOOLS_CHANNEL')!='preview':continue
-        for asset in release.get('assets',[]):
-            if asset['name']=='suite-update.json':
-                return read_remote_json(asset['browser_download_url'])
-    raise RuntimeError('No published suite release in this update channel')
+    # Stable channel is the default; preview installs opt in through prefix/channel.
+    return latest_suite_manifest(preview=os.environ.get('TTOOLS_CHANNEL')=='preview')
 
 def update(prefix,force=False,automatic=False):
     prefix=prefix_path(prefix)
@@ -290,7 +283,8 @@ def update(prefix,force=False,automatic=False):
     stamp=prefix/'update-check.json'
     if automatic and stamp.is_file():
         cached=json.loads(stamp.read_text(encoding='utf-8'))
-        if time.time()-cached.get('checked',0)<86400:return False
+        retry_after=900 if cached.get('status')=='unavailable' else 21600
+        if time.time()-cached.get('checked',0)<retry_after:return False
     with locked(prefix):
         remote=release_manifest()
         if remote.get('schema_version')!=1 or remote.get('app_id')!='ttools':raise ValueError('Invalid update manifest')

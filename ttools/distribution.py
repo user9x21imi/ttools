@@ -10,8 +10,10 @@ import stat
 import ssl
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 
 REPOSITORY = 'user9x21imi/ttools'
@@ -133,6 +135,32 @@ def read_remote_json(url):
         path=Path(folder)/'manifest.json'
         fetch(url,path,2*1024*1024)
         return json.loads(path.read_text(encoding='utf-8'))
+
+def latest_suite_manifest(preview=False):
+    """Read the newest suite manifest without consuming GitHub API quota."""
+    namespace='{http://www.w3.org/2005/Atom}'
+    with tempfile.TemporaryDirectory(prefix='ttools-release-feed-') as folder:
+        path=Path(folder)/'releases.atom'
+        fetch(f'https://github.com/{REPOSITORY}/releases.atom',path,2*1024*1024)
+        root=ET.parse(path).getroot()
+    prefix=f'https://github.com/{REPOSITORY}/releases/tag/'
+    for entry in root.findall(namespace+'entry'):
+        for link in entry.findall(namespace+'link'):
+            href=link.get('href','')
+            if not href.startswith(prefix):continue
+            tag=urllib.parse.unquote(href[len(prefix):])
+            if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc|preview)\.\d+)?',tag):continue
+            if not preview and '-' in tag:continue
+            manifest_url=f'https://github.com/{REPOSITORY}/releases/download/{urllib.parse.quote(tag,safe="")}/suite-update.json'
+            try:manifest=read_remote_json(manifest_url)
+            except urllib.error.HTTPError as error:
+                if error.code==404:continue
+                raise
+            if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':
+                raise ValueError('Invalid suite update manifest')
+            if manifest.get('version')!=tag[1:]:raise ValueError('Release tag/version mismatch')
+            return manifest
+    raise RuntimeError('No published suite release in this update channel')
 
 def extract_zip(archive,directory):
     directory=Path(directory).resolve()
