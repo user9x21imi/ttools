@@ -76,7 +76,10 @@ jobs:
           name: ttools-release
           path: dist/*
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    # A versioned change merged to main becomes a public preview Release after
+    # every check and platform package succeeds. Maintainers can also publish a
+    # selected ref manually.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: package
     runs-on: ubuntu-24.04
     permissions:
