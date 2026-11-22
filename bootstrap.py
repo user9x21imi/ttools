@@ -71,10 +71,12 @@ def release_manifest(preview=False, tag=None):
         except urllib.error.HTTPError as error:
             if error.code==404 and not tag:continue
             raise
-        if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':
+        if manifest.get('schema_version') not in (1,2) or manifest.get('app_id')!='ttools':
             raise ValueError('Invalid update manifest')
         if manifest.get('version')!=candidate.removeprefix('v'):
             raise ValueError('Release tag/version mismatch')
+        if manifest.get('schema_version')==2 and not re.fullmatch(r'[0-9a-f]{40}',manifest.get('source_commit','')):
+            raise ValueError('Invalid suite source commit')
         return manifest
     raise RuntimeError('No published suite release in this channel')
 
@@ -125,19 +127,21 @@ def main():
             if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     p=argparse.ArgumentParser(description='One-command ttools suite bootstrap')
     p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true')
-    p.add_argument('--components',default='tspotify,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')
+    p.add_argument('--components',default='tspotify,tsoundcloud,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')
     args=p.parse_args()
     target=target_platform()
     selected=args.components.split(',')
     # Reject unsupported complete installations before downloading/installing anything.
     if target not in ('linux-x86_64','windows-x86_64') and 'ttelegram' in selected and not args.allow_partial:
         p.error('Telegram is packaged for Linux x86_64 and preview Windows x64. A complete native suite is not available for this OS. --allow-partial installs the supported applications explicitly.')
+    if target!='linux-x86_64' and 'tsoundcloud' in selected and not args.allow_partial:
+        p.error('SoundCloud is packaged for Linux x86_64 only. --allow-partial installs the supported applications explicitly.')
     if args.prefix:prefix=Path(args.prefix).expanduser().resolve()
     elif os.name=='nt':prefix=Path(os.environ['LOCALAPPDATA'])/'ttools'
     elif platform.system()=='Darwin':prefix=Path.home()/'Library/Application Support/ttools'
     else:prefix=Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'ttools-suite'
     manifest=release_manifest(args.preview,args.release)
-    if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
+    if manifest.get('schema_version') not in (1,2) or manifest.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
     artifact=next((a for a in manifest['artifacts'] if a['platform']==target),None)
     if not artifact:raise RuntimeError('No release for '+target)
     archive_data=read(artifact['url'],700*1024*1024)
@@ -154,9 +158,12 @@ def main():
             package.extractall(folder/'unpacked')
         bundle=folder/'unpacked/ttools'
         sys.path.insert(0,str(bundle))
-        from ttools.distribution import verify_bundle
+        from ttools.distribution import verify_bundle,valid_source_commit
         info=verify_bundle(bundle)
         if info['version']!=manifest['version'] or info['platform']!=target:raise ValueError('Wrong bundle version/platform')
+        if manifest.get('source_commit') is not None:
+            if not valid_source_commit(manifest['source_commit']) or info.get('source_commit')!=manifest['source_commit']:
+                raise ValueError('Suite source commit mismatch')
         if not args.no_system_deps:prepare_linux(selected)
         py=python314(prefix)
         argv=[str(py),str(bundle/'installer.py'),'--prefix',str(prefix),'--components',args.components]
@@ -165,7 +172,7 @@ def main():
         if args.preview:
             (prefix/'channel').write_text('preview',encoding='utf-8')
     print('Installed. Open a new terminal and run: ttools')
-    if args.allow_partial and target.startswith('macos'):print('Partial installation: Telegram is not included on macOS.')
+    if args.allow_partial and target.startswith('macos'):print('Partial installation: Telegram and SoundCloud are not included on macOS.')
     return 0
 
 if __name__=='__main__':

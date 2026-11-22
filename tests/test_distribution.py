@@ -79,7 +79,7 @@ class DistributionTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):suite.plan(root,target,suite.APP_IDS)
                 value=suite.plan(root,target,suite.APP_IDS,True)
                 self.assertFalse(value['complete'])
-                self.assertEqual(value['unsupported'],['ttelegram'])
+                self.assertEqual(value['unsupported'],['tsoundcloud','ttelegram'])
                 self.assertNotIn('ttelegram',value['install'])
 
     def test_native_windows_telegram_plan_is_explicit_preview(self):
@@ -88,9 +88,10 @@ class DistributionTests(unittest.TestCase):
             native=root/'components/ttelegram/windows-native'
             native.mkdir(parents=True)
             (native/'app.json').write_text(json.dumps({'version':'2026.11.18.7-win1'}))
-            value=suite.plan(root,'windows-x86_64',suite.APP_IDS)
-            self.assertTrue(value['complete'])
+            value=suite.plan(root,'windows-x86_64',suite.APP_IDS,True)
+            self.assertFalse(value['complete'])
             self.assertIn('ttelegram',value['install'])
+            self.assertEqual(value['unsupported'],['tsoundcloud'])
             self.assertEqual(value['versions']['ttelegram'],'2026.11.18.7-win1')
 
     def test_failed_install_keeps_previous_state_and_releases_lock(self):
