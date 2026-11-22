@@ -1,5 +1,17 @@
 # Проверка 2026-11-17
 
+## QA follow-up: Gallery Mode and offline preview transition
+
+The existing **Beautiful Things** built-in catalogue is now named **Gallery
+Mode** in the UI and documentation. Its selected effect preview uses a
+deterministic 320 ms terminal-cell dissolve when selection changes. This
+transitions only the catalogue preview; effect renderers and playback are
+unchanged. Two additional tests cover category selection, Cyrillic search,
+favorites persistence, launching an effect and returning to the menu, plus
+transition progress and terminal resize. The full source suite now has 67
+passing tests. The tests use a scripted terminal and do not establish visual
+correctness in Windows Terminal or macOS terminals.
+
 Проверено локально на SteamOS x86_64, Python 3.14:
 
 - 9 unittest-проверок: все 19 эффектов при 6 размерах от 1×1 до 130×40,

@@ -56,7 +56,7 @@
     "effect_count": 200,
     "tool_count": 19,
     "external_projects_bundled": false,
-    "unit_tests": 65,
+    "unit_tests": 67,
     "installation_results": "results.json"
   },
   "terminal_title": "OSC0: tthings — function · section; Konsole also OSC30 %w, previous tab format restored at exit"
