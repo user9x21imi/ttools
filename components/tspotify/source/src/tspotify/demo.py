@@ -3,6 +3,7 @@
 import copy
 import curses
 import math
+import os
 import time
 from types import SimpleNamespace
 
@@ -106,6 +107,9 @@ class Demo:
             self.volume = max(0, min(100, int(value)))
         return "ДЕМО / звук выключен"
 
+    def start_jam(self):
+        raise RuntimeError("В деморежиме Jam не создаётся. Войдите в Spotify в обычном режиме.")
+
     def toggle_favorite(self, track_id):
         self.saved = not self.saved
         return self.saved
@@ -126,6 +130,16 @@ def run(args):
     ui.API = Demo()
     ui.ASCII_ONLY = args.ascii
     ui.NO_SPLASH = args.no_splash
+    ui.NO_MOTION = args.no_motion or os.environ.get("TSPOTIFY_REDUCED_MOTION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    ui.LOW_POWER = args.low_power or os.environ.get("TSPOTIFY_LOW_POWER", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     ui.DEMO_MODE = True
     ui.ART = paths.CACHE / "demo"
     ui.ART.mkdir(exist_ok=True)

@@ -1,6 +1,7 @@
 """Cached dotted artwork. No ffmpeg, native graphics escapes or external fonts required."""
 
 import functools
+from collections import OrderedDict
 import hashlib
 import io
 import json
@@ -20,6 +21,13 @@ _http = httpx.Client(
     limits=httpx.Limits(max_connections=8, max_keepalive_connections=8),
 )
 _meta_lock = threading.Lock()
+_hot = OrderedDict()
+_hot_lock = threading.Lock()
+
+
+def cached_cover(url, width=256, height=256):
+    with _hot_lock:
+        return _hot.get((url, width, height))
 
 
 def image_url(images, size=256):
@@ -71,7 +79,13 @@ def cover(url, width=128, height=128):
     with Image.open(io.BytesIO(data)) as image:
         image = image.convert("RGB").resize((width, height), Image.Resampling.LANCZOS)
         pixels = list(getattr(image, "get_flattened_data", image.getdata)())
-    return [pixels[row * width : (row + 1) * width] for row in range(height)]
+    result = [pixels[row * width : (row + 1) * width] for row in range(height)]
+    with _hot_lock:
+        _hot[url, width, height] = result
+        _hot.move_to_end((url, width, height))
+        while len(_hot) > 16:
+            _hot.popitem(last=False)
+    return result
 
 
 def thumbnail(kind, item_id):

@@ -1,18 +1,21 @@
 """Curses interface. The same dotted renderer runs in Windows Terminal, macOS and Linux."""
 
 import concurrent.futures
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import curses
 import json
 import math
 import queue
 import sys
+import threading
 import time
 
 from . import paths
 from .api import RateLimited
-from .art import cover, logo, thumbnail, image_url
+from .art import cover, thumbnail, image_url, cached_cover
 from .audio import Audio
+from .editorial import CellGrid, char_width, dissolve_image, ease_out, fit_text, text_width, wrap_text
+from .terminal import TerminalTitle
 
 HOME = paths.HOME
 CACHE = paths.BACKEND_CACHE
@@ -38,6 +41,8 @@ PANEL_NAMES = {
 API = None
 ASCII_ONLY = False
 NO_SPLASH = False
+NO_MOTION = False
+LOW_POWER = False
 VOLUME_FUNCTION_KEYS = {curses.KEY_F10: "m", curses.KEY_F11: "-", curses.KEY_F12: "+"}
 TRANSPORT_FUNCTION_KEYS = {curses.KEY_F7: "previous", curses.KEY_F8: "play-pause", curses.KEY_F9: "next"}
 VOLUME_DEBOUNCE = 0.18
@@ -85,8 +90,10 @@ class App:
             pass
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
         self.art_pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-        self.cover_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self.transport_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self.cover_pool = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+        self.transport_pool = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        self.state_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.search_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self.events = queue.Queue()
         API.on_status = lambda message: self.events.put(("notice", message, None))
         API.on_volume_retry = lambda target, seconds, applied: self.events.put(
@@ -103,22 +110,49 @@ class App:
         self.restore_selection = self.resume_view or None
         self.last_checkpoint = time.monotonic()
         self.updated = time.monotonic()
+        self.prefetched_covers = set()
+        self.transport_queue = deque(maxlen=32)
+        self.queued_start = None
         self.art_url = ""
         self.art = []
+        self.art_loading = False
+        self.pending_art_from = None
+        self.art_transition = None
+        self.visual_track_id = (self.playback.get("item") or {}).get("id")
         self.dot_cache = OrderedDict()
         self.art_mode = "dots"
+        self.art_mode_known = False
         self.native_supported = False
         self.native_last = None
         self.native_area = None
         self.smooth_bars = [0.0] * 32
         self.smooth_time = time.monotonic()
         self.query = ""
+        self.search_due = 0.0
+        self.search_cache = OrderedDict()
+        self.search_scope = "spotify"
+        self.global_query = ""
+        self.context_query = ""
+        self.context_items = None
+        self.context_section = ""
+        self.context_kind = "список"
         self.editing = False
         self.help = False
+        self.share_dialog = None
         self.help_offset = 0
         self.layout_editor = False
         self.fullscreen = False
+        self.motion_enabled = not NO_MOTION
+        self.low_power = LOW_POWER
+        self.panel_transition = None
+        self.selection_transition = None
+        self.volume_feedback_until = 0.0
+        self._volume_feedback_visible = False
+        self._render_grid = None
+        self._display_grid = None
         self.focus_panel = "library"
+        self.search_layout = False
+        self.search_suspended = False
         self.hits = []
         self.layout_selected = 0
         self.order = DEFAULT_ORDER.copy()
@@ -131,12 +165,14 @@ class App:
             self.cover_right = bool(layout.get("cover_right", False))
             self.show_spectrum = bool(layout.get("show_spectrum", True))
             self.art_mode = layout.get("art_mode", "dots")
+            self.art_mode_known = layout.get("art_mode") in ("dots", "ascii", "blocks")
             if self.art_mode not in ("dots", "ascii", "blocks"):
                 self.art_mode = "dots"
         except (OSError, ValueError):
             pass
         if ASCII_ONLY:
             self.art_mode = "ascii"
+            self.art_mode_known = True
         self.saved_tracks = cached("SavedTracks", {})
         self.favorite_changes = {}
         try:
@@ -270,7 +306,7 @@ class App:
         if key in self.pending:
             return
         self.pending.add(key)
-        if key == "command":
+        if key in ("command", "transport"):
             self.transport_revision += 1
         revision = self.transport_revision
 
@@ -285,12 +321,22 @@ class App:
             except Exception as exc:
                 self.events.put((key, None, str(exc)))
 
-        pool = self.cover_pool if key == "cover" else self.art_pool if key.startswith("thumb:") else self.pool
-        if key in ("volume", "command"):
+        pool = self.cover_pool if key.startswith("cover:") else self.art_pool if key.startswith("thumb:") else self.pool
+        if key.startswith("prefetch:"):
+            pool = self.art_pool
+        if key == "poll":
+            pool = self.state_pool
+        if key == "search":
+            pool = self.search_pool
+        if key in ("volume", "command", "transport"):
             pool = self.transport_pool
         pool.submit(run)
 
     def library(self, section):
+        self.set_search_scope("spotify")
+        self.context_items = None
+        if self.search_layout:
+            self.leave_search_layout()
         self.fullscreen = False
         self.section = section
         self.selected = 0
@@ -324,6 +370,13 @@ class App:
                 break
             changed = True
             self.pending.discard(key)
+            if key.startswith("prefetch:"):
+                continue
+            if key.startswith("cover:") and error:
+                if key[6:] == self.art_url:
+                    self.art_loading = False
+                    self.pending_art_from = None
+                continue
             if key == "hotkey":
                 if value == "quit":
                     self.running = False
@@ -373,6 +426,25 @@ class App:
                         + (0.025 if getattr(API, "local_controls", False) else VOLUME_INTERVAL),
                     )
                 continue
+            if key == "jam":
+                if self.share_dialog and self.share_dialog[0] == "SPOTIFY JAM":
+                    if error:
+                        self.share_dialog = ("SPOTIFY JAM", "Не удалось создать Jam: " + str(error), "")
+                    else:
+                        names = ", ".join(
+                            member.get("name", "Участник") for member in value.get("members", [])
+                        )
+                        body = (
+                            "Участники: " + names + ". " if names else "Jam создан. "
+                        ) + "Скопируйте приглашение кнопкой внизу и отправьте друзьям."
+                        self.share_dialog = ("SPOTIFY JAM", body, value["url"])
+                continue
+            if key == "clipboard":
+                self.notice = value
+                if self.share_dialog:
+                    title, _, url = self.share_dialog
+                    self.share_dialog = (title, value, url)
+                continue
             if key == "notice":
                 self.notice = value
                 continue
@@ -382,9 +454,23 @@ class App:
                     self.thumbnails.popitem(last=False)
                 continue
             if error:
+                if key == "search" and (self.search_scope == "context" or self.search_suspended):
+                    continue
+                if key == "transport":
+                    self.transport_queue.clear()
+                if key == "command" and self.queued_start:
+                    item, self.queued_start = self.queued_start, None
+                    self.start_track(item)
+                    continue
                 if key.startswith("library:"):
                     self.library_requested.discard(key[8:])
-                if key == "poll" and API.backend and ("Connection refused" in error or "timed out" in error):
+                if (
+                    key == "poll"
+                    and API.backend
+                    and hasattr(API.backend, "alive")
+                    and not API.backend.alive()
+                    and ("Connection refused" in error or "timed out" in error)
+                ):
                     self.notice = "Переподключаю фоновый плеер…"
                     self.submit("reconnect", API.backend.restart)
                     continue
@@ -433,14 +519,31 @@ class App:
                     continue
                 now = time.monotonic()
                 old = self.playback
+                if (
+                    old.get("is_loading")
+                    and "command" in self.pending
+                    and (incoming.get("item") or {}).get("id") != (old.get("item") or {}).get("id")
+                ):
+                    continue
                 same = (old.get("item") or {}).get("id") == (incoming.get("item") or {}).get("id")
-                if same and old.get("is_playing") and incoming.get("is_playing"):
+                if (
+                    same
+                    and old.get("is_playing")
+                    and incoming.get("is_playing")
+                    and old.get("native_seek_revision") == incoming.get("native_seek_revision")
+                ):
                     expected = (old.get("progress_ms") or 0) + max(0, now - self.updated) * 1000
                     actual = incoming.get("progress_ms") or 0
                     if abs(actual - expected) < 2500:
                         incoming = {**incoming, "progress_ms": expected}
                 self.playback = incoming
                 self.updated = now
+                if not incoming.get("modes_pending") and self.notice.endswith(" · ожидает применения"):
+                    self.notice = self.notice.removesuffix(" · ожидает применения")
+                if incoming.get("is_playing") and self.notice.startswith(
+                    ("Воспроизводится:", "Переподключаю", "Плеер подключён", "Команда выполнена")
+                ):
+                    self.notice = ""
                 if (
                     (not getattr(API, "backend", None) or getattr(API, "external", False))
                     and not self.volume_dirty
@@ -454,23 +557,64 @@ class App:
                 if time.monotonic() - self.last_checkpoint > 5:
                     self.checkpoint()
                 self.track_cover(self.playback.get("item") or {})
-            elif key == "cover":
+            elif key.startswith("cover:"):
                 url, image = value
                 if url == self.art_url:
-                    self.art = image
-                elif self.art_url:
-                    self.submit("cover", lambda u=self.art_url: (u, cover(u, 256, 256)))
+                    source = self.pending_art_from
+                    self.pending_art_from = None
+                    self.art_loading = False
+                    self.set_art(image, animate=bool(source), source=source)
+                elif self.art_url and self.art_loading:
+                    self.submit("cover:" + self.art_url, lambda u=self.art_url: (u, cover(u, 256, 256)))
             elif key == "search":
+                requested = (
+                    value.get("_query", self.query.strip()) if isinstance(value, dict) else self.query.strip()
+                )
+                result = value.get("_results", value) if isinstance(value, dict) else value
+                self.search_cache[requested] = (time.monotonic(), result)
+                while len(self.search_cache) > 24:
+                    self.search_cache.popitem(last=False)
+                if self.search_suspended or self.search_scope == "context":
+                    continue
+                if requested != self.query.strip():
+                    self.search_due = max(self.search_due, time.monotonic())
+                    continue
+                value = result
+                old_items = self.items if self.section == "Поиск: " + self.query else []
+                selected_id = (
+                    old_items[self.selected][1].get("id")
+                    if old_items and self.selected < len(old_items)
+                    else None
+                )
                 self.section = "Поиск: " + self.query
-                self.items = []
+                self.items = list(old_items)
+                seen = {(kind, item.get("id")) for kind, item in self.items}
+                indexes = {(kind, item.get("id")): i for i, (kind, item) in enumerate(self.items)}
                 for kind, name in [
                     ("track", "tracks"),
                     ("album", "albums"),
                     ("artist", "artists"),
                     ("playlist", "playlists"),
                 ]:
-                    self.items.extend((kind, item) for item in (value or {}).get(name, []) if item)
-                self.selected = 0
+                    for item in (value or {}).get(name, []):
+                        if not item:
+                            continue
+                        identity = (kind, item.get("id"))
+                        if identity in indexes:
+                            index = indexes[identity]
+                            self.items[index] = (kind, {**self.items[index][1], **item})
+                        elif identity not in seen:
+                            indexes[identity] = len(self.items)
+                            self.items.append((kind, item))
+                            seen.add(identity)
+                        thumb_key = kind + ":" + item.get("id", "")
+                        if self.thumbnails.get(thumb_key) == [] and (
+                            item.get("images") or (item.get("album") or {}).get("images")
+                        ):
+                            self.thumbnails.pop(thumb_key, None)
+                self.selected = next(
+                    (i for i, (_, item) in enumerate(self.items) if item.get("id") == selected_id), 0
+                )
                 self.restore_selected_row()
                 self.notice = f"Найдено: {len(self.items)} · Enter — слушать"
             elif key == "open":
@@ -480,26 +624,53 @@ class App:
                 tracks = data.get("tracks", [])
                 if isinstance(tracks, dict):
                     tracks = tracks.get("items", [])
-                self.history.append((self.section, self.items, self.selected))
+                previous_items = (
+                    self.context_items
+                    if self.search_scope == "context" and self.context_items is not None
+                    else self.items
+                )
+                previous_id = self.items[self.selected][1].get("id") if self.items else None
+                previous_selected = next(
+                    (i for i, (_, item) in enumerate(previous_items) if item.get("id") == previous_id), 0
+                )
+                self.history.append((self.section, previous_items, previous_selected))
                 self.section = (data.get("playlist") or data.get("album") or data).get("name", "Треки")
                 for track in tracks:
                     if isinstance(track, dict):
-                        track["_context_uri"] = data.get("context_uri")
+                        target = track["track"] if isinstance(track.get("track"), dict) else track
+                        target["_context_uri"] = data.get("context_uri")
                 self.items = [
                     ("track", x["track"] if isinstance(x.get("track"), dict) else x)
                     for x in tracks
                     if isinstance(x, dict) and x.get("id", x.get("track"))
                 ]
+                self.context_items = list(self.items)
+                self.context_section = self.section
+                uri = data.get("context_uri") or ""
+                self.context_kind = uri.split(":")[1] if uri.count(":") >= 2 else "список"
+                self.context_query = ""
+                self.set_search_scope("context")
+                self.query = ""
+                self.search_due = 0
+                self.search_suspended = True
                 self.selected = 0
                 self.restore_selected_row()
                 self.notice = f"Треков: {len(self.items)} · Enter слушать · ← назад"
-            elif key == "command":
+            elif key in ("command", "transport"):
                 self.transport_revision += 1
                 if getattr(API, "local_controls", False) and getattr(API, "last_playback", None):
                     self.playback = dict(API.last_playback)
                     self.updated = time.monotonic()
-                self.notice = value if isinstance(value, str) else "Команда подтверждена"
+                self.notice = (
+                    value if isinstance(value, str) and not value.startswith("Воспроизводится:") else ""
+                )
                 self.track_cover((getattr(API, "last_playback", {}) or {}).get("item") or {})
+                self.submit("poll", cli, "get", "key", "playback")
+                if key == "transport" and self.transport_queue:
+                    self.command(*self.transport_queue.popleft())
+                if key == "command" and self.queued_start:
+                    item, self.queued_start = self.queued_start, None
+                    self.start_track(item)
             elif key == "favorite":
                 track_id, was_liked, track = self.like_target
                 if isinstance(value, bool):
@@ -525,7 +696,14 @@ class App:
 
     def put(self, y, x, text, color=1, bold=False, width=None):
         h, w = self.s.getmaxyx()
-        if y < 0 or y >= h or x < 0 or x >= w:
+        offset = getattr(self, "_panel_x", 0)
+        panel_w = getattr(self, "_panel_width", w)
+        if width is None:
+            width = max(0, panel_w - x - 1)
+        else:
+            width = min(width, max(0, panel_w - x - 1))
+        x += offset
+        if y < 0 or y >= h or x < 0 or x >= w or width <= 0:
             return
         text = str(text).replace("\n", " ").replace("\r", " ").replace("\t", " ")
         if ASCII_ONLY:
@@ -555,14 +733,19 @@ class App:
                     }
                 )
             )
+        text = fit_text(text, width)
+        if self._render_grid is not None:
+            self._render_grid.write(y, x, text, color, bold)
         try:
-            self.s.addnstr(
-                y,
-                x,
-                text,
-                max(0, min(w - x - 1, width or w)),
-                (curses.color_pair(color) if curses.has_colors() else 0) | (curses.A_BOLD if bold else 0),
-            )
+            if not getattr(self, "_suppress_direct", False):
+                self.s.addnstr(
+                    y,
+                    x,
+                    text,
+                    len(text),
+                    (curses.color_pair(color) if curses.has_colors() else 0)
+                    | (curses.A_BOLD if bold else 0),
+                )
         except curses.error:
             pass
 
@@ -577,9 +760,20 @@ class App:
             self.next_color += 1
         return self.colors.get(key, 4)
 
-    def dot_image(self, image, y, x, width, height, logo=False):
+    def symbol_image(self, image, y, x, width, height, *, ascii_only=False, cache=True):
+        if not ascii_only:
+            self.dot_image(image, y, x, width, height, cache=cache)
+            return
+        ramp = " .:-=+*#%@"
+        for yy in range(height):
+            row = image[min(len(image) - 1, yy * len(image) // height)]
+            for xx in range(width):
+                rgb = row[min(len(row) - 1, xx * len(row) // width)]
+                self.put(y + yy, x + xx, ramp[min(9, int(sum(rgb) / 765 * 9))], 2)
+
+    def dot_image(self, image, y, x, width, height, logo=False, cache=True):
         cache_key = (id(image), width, height, logo)
-        cached_cells = self.dot_cache.get(cache_key)
+        cached_cells = self.dot_cache.get(cache_key) if cache else None
         if cached_cells:
             self.dot_cache.move_to_end(cache_key)
             for yy, xx, glyph, color in cached_cells[1]:
@@ -632,9 +826,10 @@ class App:
                 else:
                     cells.append((yy, xx, " ", 1))
                     self.put(y + yy, x + xx, " ")
-        self.dot_cache[cache_key] = (image, cells)
-        while len(self.dot_cache) > 8:
-            self.dot_cache.popitem(last=False)
+        if cache:
+            self.dot_cache[cache_key] = (image, cells)
+            while len(self.dot_cache) > 8:
+                self.dot_cache.popitem(last=False)
 
     def box(self, y, x, height, width, title="", active=False):
         if height < 3 or width < 4:
@@ -649,34 +844,162 @@ class App:
             self.put(y, x + 2, " " + title + " ", 3 if active else 4, width=width - 5)
 
     def hit(self, y, x, height, width, action, value):
-        self.hits.append((y, x, height, width, action, value))
+        self.hits.append((y, x + getattr(self, "_panel_x", 0), height, width, action, value))
 
     def button(self, y, x, text, key):
         self.put(y, x, text, 3)
-        self.hit(y, x, 1, len(text), "key", key)
+        self.hit(y, x, 1, text_width(text), "key", key)
 
     def button_row(self, y, w, actions, x=3):
         for text, key in actions:
-            if x + len(text) > w - 2:
+            if x + text_width(text) > w - 2:
                 break
             self.button(y, x, text, key)
-            x += len(text) + 1
+            x += text_width(text) + 1
 
-    def transport(self, y, w):
+    def _draw_grid(self, grid, previous=None):
+        for y, row in enumerate(grid.cells):
+            x = 0
+            while x < grid.width:
+                cell = row[x]
+                if previous is not None and cell == previous.cells[y][x]:
+                    x += 1
+                    continue
+                if cell.glyph == "":
+                    x += 1
+                    continue
+                style = cell.color, cell.bold
+                start = x
+                chars = []
+                while x < grid.width:
+                    current = row[x]
+                    if previous is not None and current == previous.cells[y][x]:
+                        break
+                    if current.glyph == "":
+                        x += 1
+                        continue
+                    if (current.color, current.bold) != style:
+                        break
+                    chars.append(current.glyph)
+                    x += max(1, char_width(current.glyph))
+                if not chars:
+                    x = max(x, start + 1)
+                    continue
+                attributes = (
+                    curses.color_pair(style[0]) if curses.has_colors() else 0
+                ) | (curses.A_BOLD if style[1] else 0)
+                try:
+                    self.s.addnstr(y, start, "".join(chars), sum(len(glyph) for glyph in chars), attributes)
+                except curses.error:
+                    pass
+
+    def _finish_render(self, now=None):
+        now = time.monotonic() if now is None else now
+        target = self._render_grid
+        if target is None:
+            return
+        self._last_grid = target.clone()
+        previous = self._display_grid
+        transition = self.panel_transition
+        if transition:
+            source, started, duration_ms = transition
+            if (source.height, source.width) != (target.height, target.width):
+                self.panel_transition = None
+            else:
+                progress = ease_out((now - started) / duration_ms)
+                if progress >= 1:
+                    self.panel_transition = None
+                else:
+                    self._display_grid = source.compose(target, progress)
+                    self._draw_grid(self._display_grid, previous)
+                    self._suppress_direct = False
+                    return
+        if getattr(self, "_suppress_direct", False):
+            self._draw_grid(target, previous)
+        self._display_grid = target.clone()
+        self._suppress_direct = False
+
+    def begin_panel_transition(self, now=None):
+        if not self.motion_enabled or self.low_power or self._display_grid is None:
+            self.panel_transition = None
+            return
+        now = time.monotonic() if now is None else now
+        self.panel_transition = (self._display_grid.clone(), now, 0.21)
+
+    def visual_art(self, now=None):
+        now = time.monotonic() if now is None else now
+        if not self.art_transition:
+            return self.art
+        source, started, duration_ms = self.art_transition
+        progress = (now - started) / duration_ms
+        if progress >= 1:
+            self.art_transition = None
+            return self.art
+        return dissolve_image(source, self.art, ease_out(progress))
+
+    def set_art(self, image, *, animate=True, source=None, now=None):
+        now = time.monotonic() if now is None else now
+        previous = source if source is not None else self.visual_art(now)
+        self.art = image or []
+        if previous and self.art and animate and self.motion_enabled and not self.low_power:
+            self.art_transition = (previous, now, 0.28)
+        else:
+            self.art_transition = None
+
+    def begin_selection(self, selected, now=None):
+        now = time.monotonic() if now is None else now
+        selected = max(0, min(len(self.items) - 1, selected)) if self.items else 0
+        if selected == self.selected:
+            return
+        start = self.selection_position(now)
+        self.selected = selected
+        self.selection_transition = (start, float(selected), now, 0.1) if self.motion_enabled and not self.low_power else None
+
+    def selection_position(self, now=None):
+        if not self.selection_transition:
+            return float(self.selected)
+        now = time.monotonic() if now is None else now
+        start, end, began, duration_ms = self.selection_transition
+        progress = (now - began) / duration_ms
+        if progress >= 1:
+            self.selection_transition = None
+            return float(self.selected)
+        return start + (end - start) * ease_out(progress)
+
+    def transport(self, y, w, x=3, rows=1):
         active = self.playback.get("is_playing", False)
-        self.button_row(
-            y,
-            w,
-            [
-                ("[-]", "-"),
-                ("[+]", "+"),
-                ("[Space Пауза]" if active else "[Space Играть]", " "),
-                ("[m Звук]", "m"),
-                ("[p Назад]", "p"),
-                ("[n Далее]", "n"),
-                ("[f ♥]", "f"),
-            ],
-        )
+        actions = [
+            ("− VOL" if w >= 100 else "−", "-"),
+            ("+ VOL" if w >= 100 else "+", "+"),
+            ("‹ PREV" if w >= 100 else "‹", "p"),
+            ("Ⅱ PAUSE" if active else "▶ PLAY" if w >= 100 else "Ⅱ" if active else "▶", " "),
+            ("NEXT ›" if w >= 100 else "›", "n"),
+            ("MUTE" if w >= 100 else "M", "m"),
+            ("♡ SAVE" if w >= 100 else "♡", "f"),
+            ("SHARE" if w >= 100 else "SH", "y"),
+            ("JAM" if w >= 100 else "J", "j"),
+        ]
+        column, row = x, 0
+        for text, key in actions:
+            if column + text_width(text) > w - 2:
+                row += 1
+                column = x
+            if row >= rows:
+                break
+            self.button(y + row, column, text, key)
+            column += text_width(text) + 1
+
+    def mode_buttons(self, y, w, x=3):
+        mode = self.playback.get("repeat_state", "off")
+        repeat = {"off": "OFF", "context": "ALL", "track": "ONE"}.get(mode, "OFF")
+        shuffle = "ON" if self.playback.get("shuffle_state") else "OFF"
+        if w >= 100:
+            self.button(y, x, f"S · SHUFFLE {shuffle}", "s")
+            offset = text_width(f"S · SHUFFLE {shuffle}") + 3
+            self.button(y, x + offset, f"R · REPEAT {repeat}", "r")
+        else:
+            self.button(y, x, f"S {shuffle}", "s")
+            self.button(y, x + 7, f"R {repeat}", "r")
 
     def mouse(self):
         self.mouse_changed = False
@@ -702,6 +1025,18 @@ class App:
         if self.help and (wheel_up or wheel_down):
             self.help_offset = max(0, self.help_offset + (-3 if wheel_up else 3))
             return
+        # Panel focus also applies when the pointer hits a child control (seek, art).
+        if self.search_layout:
+            for py, px, ph, pw, action, panel in self.hits:
+                if (
+                    action == "panel"
+                    and panel in ("player", "spectrum")
+                    and py <= y < py + ph
+                    and px <= x < px + pw
+                ):
+                    self.leave_search_layout(panel)
+                    self.mouse_changed = True
+                    break
         for by, bx, height, width, action, value in reversed(self.hits):
             if not (by <= y < by + height and bx <= x < bx + width):
                 continue
@@ -709,17 +1044,19 @@ class App:
                 panel = "library" if action == "row" else value
                 self.mouse_changed |= self.focus_panel != panel
                 self.focus_panel = panel
+                if clicked and panel == "search":
+                    self.enter_search_layout()
+                elif panel in ("player", "spectrum") and self.search_layout:
+                    self.leave_search_layout(panel)
                 if wheel_up or wheel_down:
                     if self.focus_panel == "library":
-                        self.selected = max(
-                            0, min(len(self.items) - 1, self.selected + (-3 if wheel_up else 3))
-                        )
+                        self.begin_selection(self.selected + (-3 if wheel_up else 3))
                     return
             if not clicked:
                 continue
             if action == "row":
                 self.editing = False
-                self.selected = value
+                self.begin_selection(value)
                 self.key("\n")
             elif action == "panel":
                 self.editing = value == "search"
@@ -739,261 +1076,391 @@ class App:
             return
 
     def render_fullscreen(self, h, w):
-        self.put(1, 4, "NOW PLAYING · точечная обложка · F3 / Esc свернуть", 2, width=w - 8)
         self.progress_area = self.spectrum_area = None
-        art_h = max(4, min((w - 12) // 2, h - 19))
-        art_w = art_h * 2
-        ax = (w - art_w) // 2
-        self.box(2, ax - 2, art_h + 2, art_w + 4, "ASCII · NOW PLAYING", True)
-        if self.art:
-            if ASCII_ONLY:
-                # Keep the explicit font fallback in the expanded view too.
-                ramp = " .:-=+*#%@"
-                for yy in range(art_h):
-                    row = self.art[min(len(self.art) - 1, yy * len(self.art) // art_h)]
-                    for xx in range(art_w):
-                        rgb = row[min(len(row) - 1, xx * len(row) // art_w)]
-                        self.put(3 + yy, ax + xx, ramp[min(9, int(sum(rgb) / 765 * 9))], 3)
-            else:
-                self.dot_image(self.art, 3, ax, art_w, art_h)
+        self.put(0, 2, "● TSPOTIFY · PLAYER MODE", 2, True)
+        self.button(0, max(2, w - 12), "F3 EXIT", curses.KEY_F3)
+        compact = h < 30
+        side_by_side = w >= 100
+        if compact:
+            art_h = max(5, min(8, h - 16, (w - 26) // 2))
+        elif side_by_side:
+            art_h = max(8, min(h - 21, (w - 48) // 4, 28))
         else:
-            self.put(3 + art_h // 2, ax, "Загружаю обложку…", 4, width=art_w)
+            art_h = max(7, min(h - 27, (w - 40) // 4, 18))
+        art_w = art_h * 2
+        if side_by_side:
+            ay = max(3, (h - art_h - 13) // 2)
+            ax = w - art_w - 4 if self.cover_right else 4
+        else:
+            ay = 3 if compact else max(3, (h - art_h - 15) // 2)
+            ax = max(3, (w - art_w) // 2)
+        art = self.visual_art()
+        if art:
+            self.symbol_image(
+                art,
+                ay,
+                ax,
+                art_w,
+                art_h,
+                ascii_only=ASCII_ONLY or self.art_mode == "ascii",
+                cache=not bool(self.art_transition),
+            )
+        else:
+            self.put(ay + art_h // 2, ax, "♪  NO COVER", 4, width=art_w)
         item = self.playback.get("item") or {}
-        title_y = art_h + 5
-        self.put(title_y, 4, item.get("name", "Выберите трек в библиотеке"), 1, True, width=w - 8)
-        self.put(
-            title_y + 1, 4, artists(item) + " · " + (item.get("album") or {}).get("name", ""), 3, width=w - 8
-        )
         active = self.playback.get("is_playing", False)
-        self.put(title_y + 2, 4, "● ИГРАЕТ" if active else "Ⅱ ПАУЗА · Space продолжить", 2 if active else 5)
+        content_w = w - art_w - 13 if side_by_side else w - 8
+        if self.cover_right and side_by_side:
+            x = 4
+            content_w = max(12, ax - x - 5)
+        elif side_by_side:
+            x = ax + art_w + 5
+            content_w = max(12, w - x - 4)
+        else:
+            x = 4
+        title_y = (
+            max(3, ay + (art_h - 12) // 2)
+            if side_by_side
+            else ay + art_h + 1
+        )
+        self.put(title_y, x, "NOW PLAYING", 4, width=content_w)
+        title_lines = wrap_text(item.get("name", "Выберите трек в библиотеке"), content_w, 2 if not compact else 1)
+        for line, text in enumerate(title_lines):
+            self.put(title_y + 1 + line, x, text, 1, True, width=content_w)
+        info_y = title_y + 3
+        self.put(info_y, x, artists(item) or "Spotify", 2, width=content_w)
+        self.put(info_y + 1, x, (item.get("album") or {}).get("name", ""), 4, width=content_w)
+        status = (
+            "◌ LOADING"
+            if self.playback.get("is_loading")
+            else "● PLAYING"
+            if active
+            else "QUEUE ENDED · Space from start"
+            if self.playback.get("queue_ended")
+            else "Ⅱ PAUSED · Space to play"
+        )
+        self.put(info_y + 2, x, status, 2 if active else 4, width=content_w)
+        if self.art_loading and not compact:
+            self.put(info_y + 3, x, "COVER · LOADING", 12, width=content_w)
         total = item.get("duration_ms") or 0
         ms = min(
             total,
             (self.playback.get("progress_ms") or 0)
             + ((time.monotonic() - self.updated) * 1000 if active else 0),
         )
-        width = w - 25
-        filled = int(width * ms / total) if total else 0
-        self.progress_area = (title_y + 3, 4, width)
-        self.hit(title_y + 3, 4, 1, width, "seek", None)
-        self.put(title_y + 3, 4, "━" * filled + "─" * (width - filled), 2)
-        self.put(title_y + 3, width + 6, f"{duration(ms)} / {duration(total)}", 4)
-        self.transport(title_y + 5, w)
-        sy = title_y + 7
-        self.put(sy - 1, 4, "Спектр Spotify · " + self.audio.status, 4, width=w - 8)
-        self.spectrum_area = (sy, 4, max(1, h - sy - 3), w - 8)
+        progress_y = (
+            min(h - 6, ay + art_h + 1)
+            if side_by_side
+            else min(h - 6, info_y + 4)
+        )
+        progress_x = 4
+        progress_w = w - 8
+        bar_w = max(8, progress_w - 18)
+        self.progress_area = (progress_y, progress_x, bar_w)
+        self.hit(progress_y, progress_x, 1, bar_w, "seek", None)
+        filled = int(bar_w * ms / total) if total else 0
+        self.put(progress_y, progress_x, "━" * filled, 2)
+        self.put(progress_y, progress_x + filled, "─" * (bar_w - filled), 11)
+        self.put(progress_y, progress_x + bar_w + 2, f"{duration(ms)} / {duration(total)}", 4, width=16)
+        self.render_next(progress_y - 1, progress_x, progress_w)
+        sy = min(h - 5, progress_y + 2)
+        self.put(sy - 1, 4, "AUDIO / LIVE · " + self.audio.status, 4, width=w - 8)
+        self.spectrum_area = (sy, 4, max(1, h - sy - 5), w - 8)
         self.spectrum(*self.spectrum_area)
-        self.put(
-            h - 2, 4, f"Громкость {self.volume}% · ± / F11/F12 · F3/Esc назад · Ctrl+Q выход", 3, width=w - 8
-        )
-        self.put(h - 1, 4, self.notice, 4, width=w - 8)
 
-    def render(self):
-        self.hits = []
-        self.s.erase()
-        h, w = self.s.getmaxyx()
-        if h < 24 or w < 78:
-            self.spectrum_area = None
-            self.progress_area = None
-            self.put(1, 2, "Увеличьте терминал: минимум 78 × 24", 5)
-            self.put(3, 2, "q — выход")
-            self.s.refresh()
-            return
-        self.put(0, 2, "● tspotify", 2, True)
-        self.put(0, 16, "DEMO / NO AUDIO" if DEMO_MODE else "YOUR MUSIC, LESS NOISE", 5 if DEMO_MODE else 4)
-        self.button(0, w - 43, "[F3 Плеер]", curses.KEY_F3)
-        self.button(0, w - 31, "[L Окна]", "L")
-        self.button(0, w - 21, "[? Клавиши]", "?")
-        if self.fullscreen:
-            self.render_fullscreen(h, w)
-            if self.help:
-                self.render_help(h, w)
-            curses.curs_set(0)
-            self.s.refresh()
-            return
-        player_h = (
-            6
-            if h < 25
-            else 7
-            if h < 27
-            else 8
-            if h < 30
-            else (24 if h >= 58 else (20 if h >= 46 else (16 if h >= 40 else (13 if h >= 35 else 11))))
-        )
-        spectrum_h = (6 if h >= 43 else 4) if self.show_spectrum and h >= 35 else 0
-        count = 4 if spectrum_h else 3
-        available = h - 8 - (count - 1)
-        heights = {
-            "search": 3,
-            "player": player_h,
-            "spectrum": spectrum_h,
-            "library": max(4, available - 3 - player_h - spectrum_h),
-        }
-        y = 2
-        for name in self.order:
-            if heights[name]:
-                getattr(self, "render_" + name)(y, w, heights[name])
-                y += heights[name] + 1
-        self.box(
-            h - 5,
-            1,
-            4,
-            w - 2,
-            "БЕЗ ЗВУКА · + / F12 громче · F10"
-            if not self.volume
-            else "Громкость · − / + · F11/F12 · F10 mute",
-        )
-        self.hit(h - 4, 3, 1, 16, "volume", None)
-        filled = round(self.volume * 16 / 100)
-        self.put(h - 4, 3, "━" * filled + "─" * (16 - filled), 2)
-        self.put(h - 4, 21, f"{self.volume:3d}%", 1, True)
-        self.put(h - 4, 30, self.notice, 4, width=w - 34)
-        self.transport(h - 3, w)
+    def render_next(self, y, x, width):
+        item = self.playback.get("next_item") or {}
+        if item.get("name"):
+            label = "Далее: " + artists(item) + " — " + item["name"]
+            if self.playback.get("queue_ended"):
+                label = "С начала: " + artists(item) + " — " + item["name"]
+        else:
+            label = (
+                "Далее: очередь завершена"
+                if self.playback.get("queue_ended")
+                else "Далее: загружаю название…"
+                if self.playback.get("next_track_id")
+                else "Далее: нет следующего трека в очереди"
+            )
+        self.put(y, x, label, 3, width=width)
+
+    def render_header(self, h, w):
+        self.put(0, 2, "● TSPOTIFY", 2, True)
+        if not self.fullscreen:
+            actions = [("F3 PLAYER", curses.KEY_F3), ("/ SEARCH", "/"), ("? HELP", "?")]
+            if w >= 130:
+                actions.insert(1, ("L LAYOUT", "L"))
+            total = sum(text_width(label) for label, _ in actions) + len(actions) - 1
+            x = max(15, w - total - 3)
+            for label, key in actions:
+                self.button(0, x, label, key)
+                x += text_width(label) + 1
+        if h > 1:
+            item = self.playback.get("item") or {}
+            title = item.get("name") or "MUSIC / LESS NOISE"
+            prefix = "DEMO / NO AUDIO · " if DEMO_MODE else "NOW · " if self.playback.get("is_playing") else "READY · "
+            self.put(1, 3, prefix + title, 5 if DEMO_MODE else 4, width=w - 6)
+
+    def render_footer(self, h, w):
+        y = h - 4
+        now = time.monotonic()
+        pulsing = now < self.volume_feedback_until and self.motion_enabled
+        self._volume_feedback_visible = pulsing
+        color = 2 if pulsing else 4
+        self.put(y, 3, "VOL", color, bold=pulsing)
+        bar_x = 8
+        bar_w = min(20, max(8, w // 5))
+        self.hit(y, bar_x, 1, bar_w, "volume", None)
+        filled = round(self.volume * bar_w / 100)
+        self.put(y, bar_x, "━" * filled + "─" * (bar_w - filled), color)
+        self.put(y, bar_x + bar_w + 2, f"{self.volume:3d}%", color, bold=pulsing)
+        if pulsing:
+            self.put(y, bar_x + bar_w + 9, "VOLUME", 2, True)
+
+        self.transport(h - 3, w, x=3, rows=1)
+        self.mode_buttons(h - 2, w, x=3)
+        notice_x = max(38, w // 2)
+        self.put(h - 2, notice_x, self.notice, 4, width=w - notice_x - 2)
         self.button_row(
             h - 1,
             w,
             [
-                ("[Enter ▶]", "\n"),
-                ("[/ Поиск]", "/"),
-                ("[← Назад]", curses.KEY_LEFT),
-                ("[P Плейлист]", "P"),
-                ("[? Помощь]", "?"),
-                ("[Ctrl+Q Выход]", "\x11"),
+                ("ENTER PLAY", "\n"),
+                ("/ SEARCH", "/"),
+                ("BACK", curses.KEY_LEFT),
+                ("P PLAYLIST", "P"),
+                ("? HELP", "?"),
+                ("Ctrl+Q", "\x11"),
             ],
+            x=3,
         )
+
+    def render(self):
+        self.hits = []
+        self._panel_x = 0
+        self._panel_width = self.s.getmaxyx()[1]
+        self.spectrum_area = self.progress_area = None
+        h, w = self.s.getmaxyx()
+        self._suppress_direct = bool(
+            self.panel_transition
+            and self._display_grid
+            and (self._display_grid.height, self._display_grid.width) == (h, w)
+        )
+        if not self._suppress_direct:
+            self.s.erase()
+        self._render_grid = CellGrid(h, w)
+        if h < 24 or w < 78:
+            self.spectrum_area = None
+            self.progress_area = None
+            self.put(1, 2, "RESIZE · MINIMUM 78 × 24", 5, True)
+            self.put(3, 2, "q / Ctrl+Q  quit", 4)
+            self._finish_render()
+            self.s.refresh()
+            return
+        self.render_header(h, w)
+        if self.fullscreen:
+            self.render_fullscreen(h, w)
+            self.render_footer(h, w)
+            if self.help:
+                self.render_help(h, w)
+            if self.share_dialog:
+                self.render_share(h, w)
+            curses.curs_set(0)
+            self._finish_render()
+            self.s.refresh()
+            return
+
+        footer_y = h - 4
+        body_y = 2
+        body_h = max(1, footer_y - body_y)
+        wide = h >= 30 and w >= 110 and w >= 2 * h and not self.search_layout
+        if self.search_layout:
+            self.render_search(2, w, 2)
+            content_y = 5
+            content_h = max(4, footer_y - content_y - 1)
+            if wide:
+                library_w = max(44, int(w * 0.58))
+                self._panel_x, self._panel_width = 0, library_w
+                self.render_library(content_y, library_w, content_h)
+                self._panel_x, self._panel_width = library_w + 1, w - library_w - 1
+                player_h = max(6, content_h - (5 if self.show_spectrum else 1))
+                self.render_player(content_y, self._panel_width, player_h)
+                if self.show_spectrum:
+                    self.render_spectrum(content_y + player_h + 1, self._panel_width, content_h - player_h - 1)
+                self._panel_x, self._panel_width = 0, w
+            else:
+                player_h = 2 if self.show_spectrum else 3
+                spectrum_h = 3 if self.show_spectrum else 0
+                library_h = max(3, content_h - player_h - spectrum_h - (2 if spectrum_h else 1))
+                self.render_library(content_y, w, library_h)
+                player_y = content_y + library_h + 1
+                self.render_player(player_y, w, player_h)
+                if spectrum_h:
+                    self.render_spectrum(player_y + player_h + 1, w, spectrum_h)
+        elif wide:
+            library_w = max(43, int(w * 0.38))
+            music_w = w - library_w - 1
+            spectrum_h = min(8, max(5, body_h // 4)) if self.show_spectrum else 0
+            player_h = body_h - spectrum_h - (1 if spectrum_h else 0)
+            self._panel_x, self._panel_width = 0, music_w
+            left_order = [name for name in self.order if name in ("player", "spectrum")]
+            y = body_y
+            for name in left_order:
+                if name == "spectrum" and not self.show_spectrum:
+                    continue
+                height = player_h if name == "player" else spectrum_h
+                getattr(self, "render_" + name)(y, music_w, height)
+                y += height + 1
+            self._panel_x, self._panel_width = music_w + 1, library_w
+            self.render_library(body_y, library_w, body_h)
+            self._panel_x, self._panel_width = 0, w
+        else:
+            spectrum_h = min(4 if h >= 30 else 3, max(1, body_h - 7)) if self.show_spectrum else 0
+            player_h = min(max(7, round(body_h * 0.43)), body_h - spectrum_h - 3)
+            library_h = max(2, body_h - player_h - spectrum_h - (2 if spectrum_h else 1))
+            heights = {"player": player_h, "spectrum": spectrum_h, "library": library_h}
+            y = body_y
+            for name in (panel for panel in self.order if panel in heights):
+                height = heights[name]
+                if height <= 0 or (name == "spectrum" and not self.show_spectrum):
+                    continue
+                getattr(self, "render_" + name)(y, w, height)
+                y += height + 1
+
+        self.render_footer(h, w)
         if self.help:
             self.render_help(h, w)
         if self.layout_editor:
             self.render_layout(h, w)
-        if self.editing and not self.help and not self.layout_editor:
+        if self.share_dialog:
+            self.render_share(h, w)
+        if self.editing and not self.help and not self.layout_editor and not self.share_dialog:
             curses.curs_set(1)
-            self.s.move(self.search_y, min(w - 4, 5 + len(self.query)))
+            self.s.move(self.search_y, min(w - 4, 5 + text_width(self.query)))
         else:
             curses.curs_set(0)
+        self._finish_render()
         self.s.refresh()
 
     def render_search(self, y, w, height):
         self.hit(y, 1, height, w - 2, "panel", "search")
-        self.box(y, 1, height, w - 2, "Поиск · / или F2", self.editing or self.focus_panel == "search")
+        context = self.search_scope == "context" and self.context_items is not None
+        label = "SEARCH / THIS LIST" if context else "SEARCH / SPOTIFY"
+        self.put(y, 3, label, 2 if self.editing else 4, bold=self.editing, width=w - 6)
+        if height <= 1:
+            return
         self.search_y = y + 1
-        self.put(y + 1, 3, "›", 2)
-        hint = "Трек, исполнитель, альбом или плейлист…"
-        self.put(y + 1, 5, self.query or hint, 1 if self.editing else 4, width=w - 9)
+        hint = "Type a track, artist or album" if not context else "Search in this playlist"
+        self.put(y + 1, 3, "⌕  " + (self.query or hint), 1 if self.editing else 4, width=w - 6)
+        if height > 2:
+            self.put(y + 2, 3, "Enter search · Tab focus · Esc return", 4, width=w - 6)
+        if context:
+            self.button(y, w - 14, "F2 ALL", curses.KEY_F2)
 
     def render_player(self, y, w, height):
-        mode = {"dots": "ASCII · DOTS", "ascii": "ASCII", "blocks": "PIXEL"}.get(
-            self.art_mode, "ASCII · DOTS"
-        )
         self.hit(y, 1, height, w - 2, "panel", "player")
-        self.box(y, 1, height, w - 2, "Сейчас играет · " + mode, self.focus_panel == "player")
-        self.button(y, w - 20, "[F3 Развернуть]", curses.KEY_F3)
-        art_h = height - 4
+        if height <= 0:
+            return
+        mode = {"dots": "DOTS", "ascii": "ASCII", "blocks": "BLOCKS"}.get(self.art_mode, "DOTS")
+        self.put(y, 3, "NOW PLAYING", 2 if self.focus_panel == "player" else 4, bold=True)
+        self.put(y, 18, mode, 4, width=max(1, w - 24))
+        if w >= 70:
+            self.button(y, w - 12, "F3 VIEW", curses.KEY_F3)
+        if height < 4:
+            item = self.playback.get("item") or {}
+            self.put(y, 3, "NOW  " + item.get("name", "Choose a track"), 1, True, width=w - 6)
+            return
+        art_h = max(3, min(height - 2, (w - 40) // 2))
+        art_h = min(art_h, max(3, (w - 12) // 2))
         art_w = art_h * 2
-        ax = w - art_w - 4 if self.cover_right else 3
-        x = 3 if self.cover_right else art_w + 7
-        width = w - art_w - 12
-        new_area = (y + 2, ax, art_w, art_h)
-        self.native_area = new_area
-        self.hit(y + 2, ax, art_h, art_w, "key", curses.KEY_F3)
-        if self.art and self.art_mode == "dots":
-            self.dot_image(self.art, y + 2, ax, art_w, art_h)
-        elif self.art:
-            rows, cols = len(self.art), len(self.art[0])
-            for yy in range(art_h):
-                for xx in range(art_w):
-                    top = self.art[min(rows - 1, yy * 2 * rows // (art_h * 2))][
-                        min(cols - 1, xx * cols // art_w)
-                    ]
-                    bottom = self.art[min(rows - 1, (yy * 2 + 1) * rows // (art_h * 2))][
-                        min(cols - 1, xx * cols // art_w)
-                    ]
-                    if self.art_mode == "ascii":
-                        ramp = " .:-=+*#%@"
-                        lum = (0.2126 * top[0] + 0.7152 * top[1] + 0.0722 * top[2]) / 255
-                        self.put(
-                            y + 2 + yy,
-                            ax + xx,
-                            ramp[min(9, int(lum * 9))],
-                            self.pixel_color(top, (18, 18, 18)),
-                        )
-                    else:
-                        self.put(y + 2 + yy, ax + xx, "▀", self.pixel_color(top, bottom))
-        elif not self.art:
-            self.put(y + height // 2, ax + 2, "♪  Загружаю…", 4)
+        art_y = y + 1
+        art_x = w - art_w - 3 if self.cover_right else 3
+        text_x = 3 if self.cover_right else art_x + art_w + 4
+        text_w = max(10, w - text_x - (art_w + 6 if self.cover_right else 3))
+        if self.cover_right:
+            text_w = max(10, art_x - text_x - 3)
+        else:
+            text_w = max(10, w - text_x - 3)
+        self.native_area = (art_y, art_x, art_w, art_h)
+        self.hit(art_y, art_x, art_h, art_w, "key", curses.KEY_F3)
+        art = self.visual_art()
+        if art:
+            self.symbol_image(
+                art,
+                art_y,
+                art_x,
+                art_w,
+                art_h,
+                ascii_only=ASCII_ONLY or self.art_mode == "ascii",
+                cache=not bool(self.art_transition),
+            )
+        else:
+            self.put(art_y + art_h // 2, art_x, "♪", 2, width=art_w)
         item = self.playback.get("item") or {}
         active = self.playback.get("is_playing", False)
         liked = "spotify:track:" + str(item.get("id")) in self.saved_tracks
-        self.hit(y + (1 if height < 11 else 2), x, 1, min(width, 20), "key", " ")
-        self.hit(y + height - 2, x, 1, width, "key", "f")
-        self.put(
-            y + (1 if height < 11 else 2),
-            x,
-            "● ВОСПРОИЗВЕДЕНИЕ" if active else "Ⅱ ПАУЗА",
-            2 if active else 5,
-            width=width,
+        self.hit(art_y, text_x, 1, text_w, "key", " ")
+        title_lines = wrap_text(item.get("name", "Choose something from the library"), text_w, 2)
+        title_y = art_y
+        for line, text in enumerate(title_lines):
+            self.put(title_y + line, text_x, text, 1, True, width=text_w)
+        detail_y = title_y + max(1, len(title_lines))
+        self.put(detail_y, text_x, artists(item) or "Spotify", 2, width=text_w)
+        if height >= 6:
+            self.put(detail_y + 1, text_x, (item.get("album") or {}).get("name", ""), 4, width=text_w)
+        status_y = min(art_y + art_h - 1, detail_y + 2)
+        status = (
+            "◌ LOADING"
+            if self.playback.get("is_loading")
+            else "● PLAYING"
+            if active
+            else "QUEUE ENDED"
+            if self.playback.get("queue_ended")
+            else "Ⅱ PAUSED"
         )
-        self.put(
-            y + (2 if height < 11 else 4),
-            x,
-            item.get("name", "Выберите музыку в библиотеке"),
-            1,
-            True,
-            width=width,
-        )
-        if height >= 7:
-            self.put(y + (3 if height < 11 else 5), x, artists(item), 3, width=width)
-        if height >= 8:
-            self.put(
-                y + (4 if height < 11 else 6), x, (item.get("album") or {}).get("name", ""), 7, width=width
-            )
+        self.put(status_y, text_x, status, 2 if active else 4, width=text_w)
+        if self.art_loading:
+            self.put(status_y + 1, text_x, "COVER · LOADING", 12, width=text_w)
+        if liked:
+            self.put(y, max(text_x, w - 24), "♥ SAVED", 2, width=min(18, text_w))
         progress = (self.playback.get("progress_ms") or 0) + (
             (time.monotonic() - self.updated) * 1000 if active else 0
         )
         total = item.get("duration_ms") or 0
         progress = min(progress, total)
-        bar_w = max(8, width - 17)
-        progress_y = y + height - (3 if height < 11 else 4)
-        self.progress_area = (progress_y, x, bar_w)
-        self.hit(progress_y, x, 1, bar_w, "seek", None)
-        filled = int(bar_w * progress / total) if total else 0
-        self.put(progress_y, x, "━" * filled, 2)
-        self.put(progress_y, x + filled, "─" * (bar_w - filled), 11)
-        self.put(progress_y, x + bar_w + 2, f"{duration(progress)} / {duration(total)}", 4)
-        self.put(
-            y + height - 2,
-            x,
-            "♥ В избранном · f убрать" if liked else "♡ Добавить в избранное · f",
-            8 if liked else 4,
-            width=width,
-        )
-        if height >= 17:
-            device = (self.playback.get("device") or {}).get("name", "tspotify")
-            self.put(y + 8, x, "Устройство: " + device, 4, width=width)
-            self.button_row(
-                y + 9,
-                x + width + 2,
-                [
-                    (
-                        "[s ⇄ "
-                        + ("Перемешивание" if self.playback.get("shuffle_state") else "По порядку")
-                        + "]",
-                        "s",
-                    ),
-                    ("[r ↻ " + str(self.playback.get("repeat_state", "off")) + "]", "r"),
-                ],
-                x=x,
-            )
+        if height >= 5:
+            progress_y = y + height - 1
+            bar_w = max(4, min(text_w - 2, 22))
+            self.progress_area = (progress_y, text_x, bar_w)
+            self.hit(progress_y, text_x, 1, bar_w, "seek", None)
+            filled = int(bar_w * progress / total) if total else 0
+            self.put(progress_y, text_x, "━" * filled + "─" * (bar_w - filled), 2)
+            self.put(progress_y, text_x + bar_w + 2, f"{duration(progress)} / {duration(total)}", 4, width=max(1, text_w - bar_w - 2))
+        else:
+            self.progress_area = None
 
     def render_spectrum(self, y, w, height):
         self.hit(y, 1, height, w - 2, "panel", "spectrum")
-        self.box(
-            y, 1, height, w - 2, "Спектр · Spotify · " + self.audio.status, self.focus_panel == "spectrum"
-        )
-        self.spectrum(y + 1, 4, height - 2, w - 8)
-        self.spectrum_area = (y + 1, 4, height - 2, w - 8)
+        if height <= 0:
+            return
+        self.put(y, 3, "AUDIO / LIVE", 2 if self.focus_panel == "spectrum" else 4, bold=True)
+        self.put(y, 17, self.audio.status, 4, width=w - 20)
+        bars_h = max(1, height - 1)
+        self.spectrum(y + 1, 3, bars_h, w - 6)
+        self.spectrum_area = (y + 1, 3, bars_h, w - 6)
 
     def animate(self):
-        if self.help or self.layout_editor:
+        if self.help or self.layout_editor or self.share_dialog:
+            return
+        now = time.monotonic()
+        if (
+            self.panel_transition
+            or self.art_transition
+            or self.selection_transition
+            or now < self.volume_feedback_until
+            or self._volume_feedback_visible
+        ):
+            self.render()
             return
         if (self.show_spectrum or self.fullscreen) and getattr(self, "spectrum_area", None):
             self.spectrum(*self.spectrum_area)
@@ -1010,58 +1477,86 @@ class App:
             self.put(y, x + filled, "─" * (width - filled), 11)
             self.put(y, x + width + 2, f"{duration(ms)} / {duration(total)}", 4)
         if self.editing and self.search_y < self.s.getmaxyx()[0]:
-            self.s.move(self.search_y, min(self.s.getmaxyx()[1] - 4, 5 + len(self.query)))
+            self.s.move(self.search_y, min(self.s.getmaxyx()[1] - 4, 5 + text_width(self.query)))
+        if self._render_grid is not None:
+            self._display_grid = self._render_grid.clone()
         self.s.refresh()
 
     def render_library(self, y, w, height):
         self.hit(y, 1, height, w - 2, "panel", "library")
-        self.box(y, 1, height, w - 2, "Библиотека · " + self.section, self.focus_panel == "library")
-        tx, ty = 3, y + 1
-        for index, section in enumerate(SECTIONS, 1):
-            text = f" {index} {section} "
-            if tx + len(text) > w - 3:
-                tx, ty = 3, ty + 1
-            self.put(ty, tx, text, 12 if self.section == section else 4)
-            self.hit(ty, tx, 1, len(text), "key", str(index))
-            tx += len(text) + 1
-        list_y = ty + 1
-        thumbs = bool(self.items and self.items[0][0] in ("playlist", "album")) and height >= 7
-        row_h = 3 if thumbs else 1
-        rows = max(1, (y + height - 1 - list_y) // row_h)
-        start = max(0, self.selected - rows + 1)
+        if height <= 0:
+            return
+        section_title = self.query if self.section.startswith("Поиск:") and self.query else self.section
+        self.put(y, 3, "LIBRARY", 2 if self.focus_panel == "library" else 4, bold=True)
+        self.put(y, 13, section_title, 1, True, width=w - 16)
+        if height < 4:
+            if self.items:
+                _, item = self.items[max(0, min(self.selected, len(self.items) - 1))]
+                self.put(y + 1, 3, "› " + item.get("name", ""), 1, True, width=w - 6)
+            return
+
+        list_y = y + 1
+        if not self.search_layout:
+            labels = ["PL", "LIKED", "ALBUMS", "RECENT", "MIXES", "NEW", "FOR YOU", "DAILY"]
+            tabs_y = y + 1
+            tx = 3
+            for index, (section, label) in enumerate(zip(SECTIONS, labels), 1):
+                text = f"{index} {label}"
+                size = text_width(text)
+                if tx + size > w - 3:
+                    tabs_y += 1
+                    tx = 3
+                if tabs_y >= y + height - 2:
+                    break
+                selected_tab = self.section == section
+                self.put(tabs_y, tx, text, 2 if selected_tab else 4, bold=selected_tab)
+                self.hit(tabs_y, tx, 1, size, "key", str(index))
+                tx += size + 2
+            list_y = tabs_y + 1
+
+        detailed = self.search_layout or self.section.startswith("Поиск:")
+        with_art = bool(self.items and (detailed or self.items[0][0] in ("playlist", "album")))
+        row_h = 3 if detailed and height >= 10 else 2 if with_art and height >= 8 else 1
+        rows = max(1, (y + height - list_y) // row_h)
+        start = max(0, min(self.selected - rows + 1, len(self.items) - rows))
         self.list_area = (list_y, rows)
+        visual_index = self.selection_position()
         for row, (kind, data) in enumerate(self.items[start : start + rows]):
-            selected = start + row == self.selected
+            identity = start + row
+            selected = identity == self.selected
             yy = list_y + row * row_h
-            self.hit(yy, 3, row_h, w - 6, "row", start + row)
-            label = {"track": "ТРЕК", "album": "АЛЬБОМ", "artist": "АРТИСТ", "playlist": "ПЛЕЙЛИСТ"}.get(
-                kind, kind
-            )
-            if kind == "track":
-                milliseconds = data.get("duration_ms") or 0
-                if not milliseconds and isinstance(data.get("duration"), dict):
-                    milliseconds = data["duration"].get("secs", 0) * 1000
-                label = duration(milliseconds) if milliseconds else "--:--"
+            self.hit(yy, 3, row_h, w - 6, "row", identity)
+            transition = self.selection_transition
+            shade = 6 if selected else 1
+            if transition and not self.low_power:
+                old_index, _, began, duration_ms = transition
+                progress = ease_out((time.monotonic() - began) / duration_ms)
+                if identity == int(round(old_index)) and not selected:
+                    shade = 10 if progress < 0.55 else 4
+                elif selected and progress < 0.55:
+                    shade = 10
             if selected:
-                for dy in range(row_h):
-                    self.put(yy + dy, 3, " " * (w - 6), 6)
-            self.put(yy + row_h // 2, 3, "›" if selected else " ", 12 if selected else 4)
-            tx = 5
-            if thumbs:
-                key = kind + ":" + data["id"]
+                self.put(yy, 3, " " * max(0, w - 6), shade)
+                if row_h >= 2:
+                    self.put(yy + 1, 3, " " * max(0, w - 6), shade)
+
+            name_x = 5
+            if with_art and row_h >= 2:
+                key = kind + ":" + data.get("id", "")
                 image = self.thumbnails.get(key)
                 if image:
                     self.thumbnails.move_to_end(key)
                     if ASCII_ONLY:
-                        self.put(yy + 1, 5, "[ART]", 3)
+                        self.put(yy, 5, "[ART]", 3)
                     else:
-                        self.dot_image(image, yy, 5, 6, 3)
+                        self.dot_image(image, yy, 5, 5, 2)
                 else:
-                    self.put(yy + 1, 5, "······", 11)
-                    thumb_jobs = sum(x.startswith("thumb:") for x in self.pending)
+                    self.put(yy, 5, "·····", 11)
+                    thumb_jobs = sum(pending.startswith("thumb:") for pending in self.pending)
                     if key not in self.thumbnails and thumb_jobs < 4:
                         self.submit("thumb:" + key, self.load_thumbnail, kind, data)
-                tx = 13
+                name_x = 12
+
             owner = data.get("owner") or [""]
             by = artists(data) or (
                 owner[0]
@@ -1070,26 +1565,45 @@ class App:
                 if isinstance(owner, dict)
                 else ""
             )
-            self.put(
-                yy,
-                tx,
-                data.get("name", ""),
-                6 if selected else 1,
-                selected,
-                width=w - tx - 18 if thumbs else int((w - 20) * 0.55),
-            )
-            if thumbs:
-                self.put(yy + 1, tx, by, 6 if selected else 3, width=w - tx - 18)
-            else:
-                self.put(yy, int(w * 0.57), by, 6 if selected else 3, width=max(4, int(w * 0.27)))
-            self.put(yy, w - 14, label, 6 if selected else 4)
+            duration_label = ""
+            if kind == "track":
+                milliseconds = data.get("duration_ms") or 0
+                if not milliseconds and isinstance(data.get("duration"), dict):
+                    milliseconds = data["duration"].get("secs", 0) * 1000
+                duration_label = duration(milliseconds) if milliseconds else "--:--"
+            duration_w = text_width(duration_label)
+            name_w = max(4, w - name_x - duration_w - 8)
+            self.put(yy, name_x, data.get("name", ""), shade, selected, width=name_w)
+            if duration_label:
+                self.put(yy, w - duration_w - 4, duration_label, 4 if not selected else 6)
+            if row_h >= 2:
+                self.put(yy + 1, name_x, by, 3, width=w - name_x - 6)
+                if row_h >= 3:
+                    album_name = (data.get("album") or {}).get("name", "")
+                    self.put(yy + 2, name_x, album_name, 4, width=w - name_x - 6)
+            elif w >= 70:
+                self.put(yy, name_x + name_w + 1, by, 4, width=max(1, w - name_x - name_w - duration_w - 9))
+
+        marker_y = list_y + round((visual_index - start) * row_h)
+        if list_y <= marker_y < y + height:
+            self.put(marker_y, 3, "›", 2, True)
         if not self.items:
-            self.put(list_y, 4, "Пусто · / поиск · 1–8 разделы библиотеки", 4)
+            if self.section.startswith("Поиск:"):
+                empty = "TYPE TO SEARCH" if not self.query.strip() else "SEARCHING…" if "search" in self.pending else "NO RESULTS"
+            else:
+                empty = "EMPTY · / search · 1–8 library sections"
+            self.put(list_y, 4, empty, 4, width=w - 8)
 
     def load_thumbnail(self, kind, item):
         images = item.get("images") or (item.get("album") or {}).get("images") or []
         if images:
-            return cover(images[-1]["url"], 24, 24)
+            ready = cached_cover(image_url(images, 256))
+            if ready:
+                return [
+                    [ready[y * len(ready) // 24][x * len(ready[0]) // 24] for x in range(24)]
+                    for y in range(24)
+                ]
+            return cover(image_url(images, 24), 24, 24)
         return thumbnail(kind, item["id"])
 
     def render_layout(self, h, w):
@@ -1154,44 +1668,42 @@ class App:
         tmp.replace(CONFIG)
         self.notice = "Раскладка сохранена · L — настроить окна"
 
-    def splash(self):
-        h, w = self.s.getmaxyx()
+    def finish_intro(self, now):
+        self.intro_active = False
+        self.intro_skip_requested = False
+        self.skip_input_until = now + 0.12
+        try:
+            curses.flushinp()
+            curses.mouseinterval(180)
+        except curses.error:
+            pass
         self.s.erase()
-        x, y = max(2, (w - 78) // 2), max(1, (h - 17) // 2)
-        if ASCII_ONLY:
-            for i, line in enumerate(
-                [
-                    "     .------------.",
-                    "   /    ~~~~~~~~    \\",
-                    "  |      ~~~~~~      |",
-                    "   \\      ~~~~     /",
-                    "     `------------`",
-                ]
-            ):
-                self.put(y + i + 3, x, line, 2, True)
-        else:
-            self.dot_image(logo(), y, x, 28, 14, logo=True)
-        self.put(y + 1, x + 34, "tspotify", 2, True)
-        self.put(y + 2, x + 34, "----------------------------", 11)
-        for i, (label, value) in enumerate(
-            [
-                ("Клиент", "Spotify Connect"),
-                ("Обложки", "ASCII DOTS / 256 x 256"),
-                ("Спектр", "FFT / плавные 30 fps"),
-                ("Поиск", "/ или F2"),
-                ("Громкость", "+ / -"),
-                ("Избранное", "f / добавить и убрать"),
-                ("Окна", "L / своя раскладка"),
-                ("Справка", "? или F1"),
-            ]
-        ):
-            self.put(y + 4 + i, x + 34, label, 3, width=11)
-            self.put(y + 4 + i, x + 47, value, 1)
-        self.put(y + 15, x + 5, "Загружаем вашу музыку...", 4)
-        self.s.refresh()
-        time.sleep(2)
-        self.s.clear()
-        self.s.refresh()
+
+    def route_control(self, action):
+        if self.intro_active:
+            self.intro_skip_requested = True
+        elif time.monotonic() >= self.skip_input_until:
+            self.events.put(("hotkey", action, None))
+
+    def intro_key(self, key):
+        if key == curses.KEY_RESIZE:
+            return False
+        if key == curses.KEY_MOUSE:
+            try:
+                state = curses.getmouse()[4]
+            except curses.error:
+                return False
+            return bool(
+                state
+                & (
+                    curses.BUTTON1_PRESSED
+                    | curses.BUTTON1_CLICKED
+                    | curses.BUTTON1_DOUBLE_CLICKED
+                    | getattr(curses, "BUTTON2_PRESSED", 0)
+                    | getattr(curses, "BUTTON3_PRESSED", 0)
+                )
+            )
+        return True
 
     def spectrum(self, y, x, height, width):
         now = time.monotonic()
@@ -1221,11 +1733,55 @@ class App:
             color = 7 if j < height * 0.25 else (3 if j < height * 0.6 else 2)
             self.put(y + j, x, "".join(pieces), color)
 
+    def render_share(self, h, w):
+        self.hits = []
+        import textwrap
+
+        title, body, url = self.share_dialog
+        bw = min(w - 4, 92)
+        lines = textwrap.wrap(body, bw - 6)
+        if url:
+            lines += [""] + textwrap.wrap(url, bw - 6)
+        by, bx = max(1, (h - len(lines) - 7) // 2), (w - bw) // 2
+        for row in range(len(lines) + 7):
+            self.put(by + row, bx, " " * bw, 9)
+        self.put(by + 1, bx + 3, title, 2, True, width=bw - 6)
+        for row, line in enumerate(lines):
+            self.put(by + row + 3, bx + 3, line, 9, width=bw - 6)
+        actions = [("[Esc Закрыть]", "\x1b")]
+        if url:
+            actions.insert(0, ("[c Копировать]", "c"))
+        self.button_row(by + len(lines) + 4, bx + bw, actions, x=bx + 3)
+
+    def share(self, selected=False):
+        from .sharing import share_url
+
+        if selected and self.items:
+            kind, item = self.items[self.selected]
+            item = {**item, "type": kind}
+        else:
+            item = self.playback.get("item") or {}
+        url = share_url(item)
+        if not url:
+            self.notice = "Сначала выберите трек, альбом или плейлист"
+            return
+        self.share_dialog = ("ПОДЕЛИТЬСЯ", item.get("name", "Spotify"), url)
+        self.copy_share()
+
+    def copy_share(self):
+        from .sharing import copy_link
+
+        if self.share_dialog and self.share_dialog[2]:
+            self.submit("clipboard", copy_link, self.share_dialog[2])
+
     def render_help(self, h, w):
         self.hits = []
         lines = [
-            ("/ или F2", "Ввести поисковый запрос"),
-            ("Enter в поиске", "Найти музыку"),
+            ("/ или строка поиска", "В альбоме/плейлисте — поиск внутри списка"),
+            ("F2", "Общий поиск Spotify"),
+            ("Ввод в поиске", "Подсказки: обложка, трек, автор, альбом, время"),
+            ("↓ / Tab в поиске", "Перейти к результатам"),
+            ("Enter в поиске", "Найти музыку сразу"),
             ("Enter в списке", "Открыть плейлист / включить трек"),
             ("P", "Включить весь плейлист / альбом"),
             ("Tab", "Переключить поиск и список"),
@@ -1242,7 +1798,9 @@ class App:
             ("Щелчок мышью", "Открыть плейлист / включить трек"),
             ("o", "Открыть список треков плейлиста / альбома"),
             ("← / Backspace", "Вернуться к предыдущему списку"),
-            ("s / r", "Перемешивание / повтор"),
+            ("s / r", "Перемешивание / повтор: список → трек → выкл."),
+            ("y / Y", "Ссылка: текущий трек / выбранная строка"),
+            ("j", "Создать Jam / получить приглашение"),
             ("L", "Редактор порядка окон и обложки"),
             ("a", "Обложка: точки / ASCII / блоки"),
             ("? / F1 · Esc", "Показать / закрыть эту справку"),
@@ -1269,18 +1827,220 @@ class App:
         )
 
     def command(self, *args):
-        if "command" not in self.pending:
-            if not getattr(API, "local_controls", False):
-                self.notice = "Выполняю…"
-            self.submit("command", cli, *args)
+        if "transport" in self.pending:
+            self.transport_queue.append(args)
+            return
+        if not getattr(API, "local_controls", False):
+            self.notice = "Выполняю…"
+        self.submit("transport", cli, *args)
+
+    def start_track(self, item):
+        item = dict(item)
+        queue_items = (
+            self.context_items
+            if self.search_scope == "context" and self.context_items is not None
+            else self.items
+        )
+        tracks = [track for kind, track in queue_items if kind == "track" and len(track.get("id", "")) == 22]
+        index = next((i for i, track in enumerate(tracks) if track.get("id") == item.get("id")), None)
+        if index is not None:
+            first = max(0, index - 20) if len(tracks) > 100 else 0
+            item["_queue_uris"] = ["spotify:track:" + track["id"] for track in tracks[first : first + 100]]
+        self.notice = "Загружается: " + item.get("name", "трек")
+        self.playback = {
+            **self.playback,
+            "item": item,
+            "progress_ms": 0,
+            "is_playing": False,
+            "is_loading": True,
+        }
+        self.updated = time.monotonic()
+        self.track_cover(item)
+        if "command" in self.pending:
+            self.queued_start = item
+            if hasattr(API, "cancel_start"):
+                API.cancel_start()
+            return
+        self.submit("command", API.start, item)
 
     def track_cover(self, item):
+        identity = item.get("id")
+        changed_track = bool(self.visual_track_id and identity and identity != self.visual_track_id)
+        if identity:
+            self.visual_track_id = identity
         images = (item.get("album") or {}).get("images") or item.get("images") or []
         url = image_url(images, 256)
         if url != self.art_url:
-            self.art_url, self.art = url, []
-            if url:
-                self.submit("cover", lambda u=url: (u, cover(u, 256, 256)))
+            previous = self.visual_art()
+            self.art_url = url
+            if not url:
+                self.art_loading = False
+                self.pending_art_from = None
+                self.set_art([], animate=False)
+                return
+            ready = cached_cover(url)
+            if ready:
+                self.art_loading = False
+                self.pending_art_from = None
+                self.set_art(ready, animate=changed_track)
+            else:
+                self.pending_art_from = previous
+                self.art_loading = True
+                if not self.art:
+                    self.set_art([], animate=False)
+                self.submit("cover:" + url, lambda u=url: (u, cover(u, 256, 256)))
+
+    def prefetch_nearby(self):
+        # Load a bounded window while the user browses, before Enter/Next.
+        nearby = self.items[max(0, self.selected - 1) : self.selected + 5]
+        if self.search_scope == "context" and self.context_items and self.items:
+            identity = self.items[self.selected][1].get("id")
+            index = next(
+                (i for i, (_, item) in enumerate(self.context_items) if item.get("id") == identity), None
+            )
+            if index is not None:
+                nearby += self.context_items[index + 1 : index + 4]
+        for kind, item in nearby:
+            if kind != "track":
+                continue
+            if hasattr(API, "remember_tracks"):
+                API.remember_tracks(item)
+            images = (item.get("album") or {}).get("images") or item.get("images") or []
+            url = image_url(images, 256)
+            if (
+                url
+                and url not in self.prefetched_covers
+                and sum(k.startswith("prefetch:") for k in self.pending) < 2
+            ):
+                self.prefetched_covers.add(url)
+                if len(self.prefetched_covers) > 128:
+                    self.prefetched_covers = {url}
+                self.submit("prefetch:" + url, cover, url, 256, 256)
+
+    def set_search_scope(self, scope):
+        if scope == self.search_scope:
+            return
+        if self.search_scope == "context":
+            self.context_query = self.query
+        else:
+            self.global_query = self.query
+        self.search_scope = scope
+        self.query = self.context_query if scope == "context" else self.global_query
+
+    def filter_context(self):
+        if self.context_items is None:
+            return
+        words = self.query.casefold().split()
+        selected_id = (
+            self.items[self.selected][1].get("id") if self.items and self.selected < len(self.items) else None
+        )
+        self.items = []
+        for kind, item in self.context_items:
+            text = " ".join(
+                (
+                    item.get("name", ""),
+                    artists(item),
+                    (
+                        (item.get("album") or {}).get("name")
+                        or (self.context_section if self.context_kind == "album" else "")
+                    ),
+                )
+            ).casefold()
+            if all(word in text for word in words):
+                self.items.append((kind, item))
+        self.selected = next(
+            (i for i, (_, item) in enumerate(self.items) if item.get("id") == selected_id), 0
+        )
+        self.context_query = self.query
+        self.section = self.context_section
+        self.search_due = 0
+        self.search_suspended = True
+        self.notice = (
+            f"В списке: {len(self.items)} / {len(self.context_items)} · Esc очистить · F2 весь Spotify"
+        )
+
+    def enter_search_layout(self, scope=None):
+        already = self.search_layout
+        previous_scope = self.search_scope
+        local = self.context_items is not None and (
+            self.section == self.context_section or self.search_scope == "context"
+        )
+        self.set_search_scope(scope or ("context" if local else "spotify"))
+        self.search_layout = True
+        self.search_suspended = False
+        self.fullscreen = False
+        self.editing = True
+        self.focus_panel = "search"
+        if self.search_scope == "context":
+            self.filter_context()
+        elif self.query.strip() and (not already or previous_scope != self.search_scope):
+            self.schedule_search()
+
+    def leave_search_layout(self, panel="player"):
+        self.search_layout = False
+        self.search_suspended = True
+        self.search_due = 0
+        self.editing = False
+        self.focus_panel = panel
+
+    def schedule_search(self):
+        if self.search_scope == "context":
+            self.filter_context()
+            return
+        self.search_layout = True
+        self.search_suspended = False
+        query = self.query.strip()
+        self.section = "Поиск: " + query
+        candidates = dict(self.saved_tracks)
+        for entries in self.library_data.values():
+            for kind, item in entries:
+                if kind == "track" and item.get("id"):
+                    candidates[item["id"]] = item
+        words = query.casefold().split()
+        matches = []
+        seen = set()
+        if words:
+            for item in candidates.values():
+                text = " ".join(
+                    (item.get("name", ""), artists(item), (item.get("album") or {}).get("name", ""))
+                ).casefold()
+                if item.get("id") not in seen and all(word in text for word in words):
+                    matches.append(("track", item))
+                    seen.add(item.get("id"))
+                    if len(matches) >= 10:
+                        break
+        self.items = matches
+        self.selected = 0
+        self.notice = (
+            "Из библиотеки · ищу в Spotify…"
+            if matches
+            else "Подсказки по мере ввода · ↓ результаты · Enter поиск"
+        )
+        cached = self.search_cache.get(query)
+        if cached and time.monotonic() - cached[0] < 30:
+            self.events.put(("search", {"_query": query, "_results": cached[1]}, None))
+            self.search_due = 0
+        else:
+            self.search_due = time.monotonic() + 0.18 if query else 0
+
+    def dispatch_search(self):
+        if self.search_scope == "context":
+            self.filter_context()
+            return
+        query = self.query.strip()
+        if not query:
+            self.search_due = 0
+            return
+        if "search" in self.pending:
+            return
+        self.search_due = 0
+        self.submit("search", lambda q: {"_query": q, "_results": API.search(q)}, query)
+
+    def update_live_search(self):
+        if self.search_suspended:
+            return
+        if self.search_due and time.monotonic() >= self.search_due:
+            self.dispatch_search()
 
     def volume_wait_notice(self):
         if self.volume_dirty and volume_now() < self.volume_retry_until:
@@ -1315,6 +2075,7 @@ class App:
         if target == self.volume:
             return  # Holding a key at 0/100 must never flood Spotify.
         self.volume = target
+        self.volume_feedback_until = time.monotonic() + 0.45
         self.volume_dirty = "volume" in self.pending or self.volume != self.volume_applied
         self.volume_due_at = max(
             volume_now() + (0 if getattr(API, "local_controls", False) else VOLUME_DEBOUNCE),
@@ -1343,15 +2104,39 @@ class App:
         if k == curses.KEY_MOUSE:
             self.mouse()
             return
+        if k != curses.KEY_RESIZE and k not in VOLUME_FUNCTION_KEYS and k not in TRANSPORT_FUNCTION_KEYS:
+            if getattr(self, "share_dialog", None):
+                if k in ("\x1b", "q", "\n", "\r"):
+                    self.share_dialog = None
+                elif k == "c":
+                    self.copy_share()
+                return
         if k == curses.KEY_F3:
+            self.begin_panel_transition()
+            self.leave_search_layout()
             self.fullscreen = not self.fullscreen
             self.editing = self.help = self.layout_editor = False
             return
         if k == "\x1b" and self.fullscreen:
+            self.begin_panel_transition()
             self.fullscreen = False
             return
         if k == curses.KEY_RESIZE:
             self.s.clear()
+            return
+        if k == curses.KEY_F2:
+            if self.search_scope == "context" and self.context_items is not None:
+                identity = self.items[self.selected][1].get("id") if self.items else None
+                index = next(
+                    (i for i, (_, item) in enumerate(self.context_items) if item.get("id") == identity), 0
+                )
+                self.history.append((self.context_section, self.context_items, index))
+            self.help = False
+            self.enter_search_layout("spotify")
+            if not self.query.strip():
+                self.section = "Поиск: "
+                self.items = []
+                self.selected = 0
             return
         if k in VOLUME_FUNCTION_KEYS:
             self.volume_key(VOLUME_FUNCTION_KEYS[k])
@@ -1389,25 +2174,43 @@ class App:
             if k in ("?", "\x1b", "q", curses.KEY_F1):
                 self.help = False
             return
+        if k == "\x1b" and self.search_layout:
+            if self.search_scope == "context" and self.query:
+                self.query = ""
+                self.filter_context()
+            self.leave_search_layout("library" if self.search_scope == "context" else "player")
+            return
         if k == "\t":
-            self.editing = not self.editing
+            if self.editing:
+                self.editing = False
+                self.focus_panel = "library"
+            else:
+                self.enter_search_layout()
             return
         if self.editing:
             if k == "\x1b":
                 self.editing = False
             elif k in ("\n", "\r", curses.KEY_ENTER):
-                if self.query.strip():
+                if self.query.strip() or self.search_scope == "context":
                     self.notice = "Поиск…"
-                    self.submit("search", cli, "search", self.query.strip())
+                    self.dispatch_search()
                     self.editing = False
+                    self.focus_panel = "library"
+            elif k == curses.KEY_DOWN and self.items:
+                self.editing = False
+                self.focus_panel = "library"
             elif k in (curses.KEY_BACKSPACE, "\x7f", "\b"):
                 self.query = self.query[:-1]
+                self.schedule_search()
             elif isinstance(k, str) and k.isprintable() and len(self.query) < 180:
                 self.query += k
+                self.schedule_search()
             return
         if k in ("?", curses.KEY_F1):
             self.help = True
         elif k == "L":
+            if self.search_layout:
+                self.leave_search_layout()
             self.fullscreen = False
             self.layout_editor = True
         elif k == "a":
@@ -1415,10 +2218,14 @@ class App:
             self.art_mode = modes[(modes.index(self.art_mode) + 1) % 3] if self.art_mode in modes else "auto"
             self.save_layout()
         elif k in ("/", curses.KEY_F2):
-            self.fullscreen = False
-            self.editing = True
+            self.enter_search_layout()
         elif k == "q":
             self.running = False
+        elif k in ("y", "Y"):
+            self.share(selected=k == "Y")
+        elif k == "j":
+            self.share_dialog = ("SPOTIFY JAM", "Создаю Jam и получаю приглашение от Spotify…", "")
+            self.submit("jam", API.start_jam)
         elif k == "f":
             track = self.playback.get("item") or {}
             if track.get("id") and track.get("type") == "track" and "favorite" not in self.pending:
@@ -1428,14 +2235,13 @@ class App:
                 self.submit("favorite", API.toggle_favorite, track["id"])
         elif k in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_NPAGE, curses.KEY_PPAGE):
             offset = {curses.KEY_UP: -1, curses.KEY_DOWN: 1, curses.KEY_NPAGE: 10, curses.KEY_PPAGE: -10}[k]
-            self.selected = max(0, min(len(self.items) - 1, self.selected + offset))
+            self.begin_selection(self.selected + offset)
         elif k in tuple(str(i) for i in range(1, len(SECTIONS) + 1)):
             self.library(SECTIONS[int(k) - 1])
         elif k in ("\n", "\r", curses.KEY_ENTER) and self.items:
             kind, item = self.items[self.selected]
             if kind == "track":
-                self.notice = "Запускаю и проверяю трек…"
-                self.submit("command", API.start, item)
+                self.start_track(item)
             elif kind in ("playlist", "album", "artist"):
                 self.notice = "Загрузка треков…"
                 self.submit("open", open_context, kind, item["id"], item.get("name", "Треки"))
@@ -1444,7 +2250,9 @@ class App:
                 self.submit("command", API.start_context, kind, item)
         elif k == "P" and self.items:
             kind, item = self.items[self.selected]
-            if kind in ("playlist", "album", "artist"):
+            if kind == "track":
+                self.start_track(item)
+            elif kind in ("playlist", "album", "artist"):
                 self.notice = "Запускаю плейлист…"
                 self.submit("command", API.start_context, kind, item)
         elif k == "o" and self.items:
@@ -1454,6 +2262,21 @@ class App:
                 self.submit("open", open_context, kind, item["id"], item.get("name", "Треки"))
         elif k in (curses.KEY_LEFT, curses.KEY_BACKSPACE, "\x7f", "\b") and self.history:
             self.section, self.items, self.selected = self.history.pop()
+            uri = (self.items[0][1].get("_context_uri") or "") if self.items else ""
+            if (
+                uri
+                and not self.section.startswith("Поиск:")
+                and all(kind == "track" for kind, _ in self.items)
+            ):
+                self.context_items = list(self.items)
+                self.context_section = self.section
+                self.context_kind = uri.split(":")[1] if uri.count(":") >= 2 else "список"
+                self.context_query = ""
+                self.set_search_scope("context")
+                self.query = ""
+            else:
+                self.context_items = None
+                self.set_search_scope("spotify")
         elif k in ("+", "=", "-", "m"):
             self.volume_key(k)
         elif k in (" ", "n", "p", "s", "r"):
@@ -1468,12 +2291,17 @@ class App:
         dirty = True
         mouse_tracking = False
         controls = None
+        self.intro_active = not NO_SPLASH
+        self.intro_skip_requested = False
+        self.skip_input_until = 0
+        title = TerminalTitle()
         try:
+            title.update({} if self.intro_active else self.playback)
             if not DEMO_MODE:
                 from .control import ControlServer
 
                 controls = ControlServer(
-                    lambda action: self.events.put(("hotkey", action, None)),
+                    self.route_control,
                     engine_pid=getattr(getattr(API.backend, "process", None), "pid", None),
                 )
                 if controls.shortcut_error:
@@ -1482,23 +2310,57 @@ class App:
             curses.raw()
             try:
                 curses.mousemask(curses.ALL_MOUSE_EVENTS | curses.REPORT_MOUSE_POSITION)
-                curses.mouseinterval(180)
+                curses.mouseinterval(0 if self.intro_active else 180)
                 if sys.stdout.isatty():
                     sys.stdout.write("\x1b[?1003h")
                     sys.stdout.flush()
                     mouse_tracking = True
             except curses.error:
                 pass
-            if not NO_SPLASH:
-                self.submit("poll", cli, "get", "key", "playback")
-                self.splash()
+            from .intro import Intro, FPS
+
+            intro = (
+                Intro(
+                    time.monotonic(),
+                    motion=not NO_MOTION,
+                    art_mode=self.art_mode if self.art_mode_known else None,
+                    ascii_only=ASCII_ONLY,
+                )
+                if self.intro_active
+                else None
+            )
             while self.running:
+                if self.intro_active:
+                    now = time.monotonic()
+                    self.audio.enabled = False
+                    if intro.expired(now) or self.intro_skip_requested:
+                        self.finish_intro(now)
+                        dirty, next_frame = True, 0
+                        continue
+                    if now >= next_frame:
+                        intro.draw(self, now)
+                        next_frame = now + 1 / FPS
+                    self.s.timeout(max(1, min(33, int((next_frame - time.monotonic()) * 1000))))
+                    try:
+                        key = self.s.get_wch()
+                        if key == curses.KEY_RESIZE:
+                            intro.size = None
+                            next_frame = 0
+                        elif self.intro_key(key):
+                            self.finish_intro(time.monotonic())
+                            dirty, next_frame = True, 0
+                    except curses.error:
+                        pass
+                    continue
                 dirty = self.drain() or dirty
+                title.update(self.playback)
                 now = time.monotonic()
                 self.audio.enabled = (self.show_spectrum or self.fullscreen) and not (
-                    self.help or self.layout_editor
+                    self.help or self.layout_editor or self.share_dialog
                 )
-                if now - last_poll > 2:
+                self.prefetch_nearby()
+                self.update_live_search()
+                if now - last_poll > (0.1 if getattr(API, "local_controls", False) else 2):
                     self.submit("poll", cli, "get", "key", "playback")
                     last_poll = time.monotonic()
                 if now >= next_frame:
@@ -1507,16 +2369,29 @@ class App:
                         dirty = False
                     else:
                         self.animate()
-                    next_frame = now + (1 / 30 if self.audio.enabled else 1 / 8)
-                self.s.timeout(max(1, min(33, int((next_frame - time.monotonic()) * 1000))))
+                    motion_active = bool(
+                        self.panel_transition or self.art_transition or self.selection_transition
+                    )
+                    if self.low_power:
+                        interval = 1 / 12 if self.audio.enabled else 1 / 6
+                    else:
+                        interval = 1 / 30 if self.audio.enabled or (motion_active and self.motion_enabled) else 1 / 8
+                    next_frame = now + interval
+                timeout_max = 83 if self.low_power else 33
+                self.s.timeout(max(1, min(timeout_max, int((next_frame - time.monotonic()) * 1000))))
                 try:
                     key = self.s.get_wch()
+                    if time.monotonic() < self.skip_input_until:
+                        continue
                     self.key(key)
                     if key != curses.KEY_MOUSE or self.mouse_changed:
                         dirty = True
+                        next_frame = 0
                 except curses.error:
                     pass
         finally:
+            self.intro_active = False
+            title.close()
             if controls:
                 controls.close()
             self.checkpoint()
@@ -1530,5 +2405,92 @@ class App:
             self.audio.close()
             self.pool.shutdown(wait=False, cancel_futures=True)
             self.transport_pool.shutdown(wait=False, cancel_futures=True)
+            self.state_pool.shutdown(wait=False, cancel_futures=True)
+            self.search_pool.shutdown(wait=False, cancel_futures=True)
             self.art_pool.shutdown(wait=False, cancel_futures=True)
             self.cover_pool.shutdown(wait=False, cancel_futures=True)
+
+
+class _IntroRenderer(App):
+    """Small renderer for the startup screen; it starts no Spotify/API workers."""
+
+    def __init__(self, screen):
+        self.s = screen
+        self.colors = {}
+        self.next_color = 20
+        self.dot_cache = OrderedDict()
+        self.default_background = -1
+        self._panel_x = 0
+        self._panel_width = screen.getmaxyx()[1]
+        try:
+            screen.encoding = "utf-8"
+        except (AttributeError, TypeError):
+            pass
+        try:
+            curses.start_color()
+            curses.use_default_colors()
+        except curses.error:
+            self.default_background = 0
+        for pair, fg in ((1, 252), (2, 78), (3, 110), (4, 244), (11, 239)):
+            self.init_pair(pair, fg, -1)
+        try:
+            screen.bkgd(" ", curses.color_pair(1) if curses.has_colors() else 0)
+        except curses.error:
+            pass
+
+
+def startup_screen(screen, start, *, status=None, cancel=None):
+    """Show the system-info intro while the Spotify engine starts, then hold briefly."""
+    from .intro import DURATION, FPS, READY_HOLD, Intro
+
+    started = time.monotonic()
+    renderer = _IntroRenderer(screen)
+    intro = Intro(started, motion=not NO_MOTION, art_mode="ascii" if ASCII_ONLY else "dots", ascii_only=ASCII_ONLY)
+    done = threading.Event()
+    result = {"error": None, "finished": None}
+
+    def initialize():
+        try:
+            start()
+        except BaseException as error:
+            result["error"] = error
+        finally:
+            result["finished"] = time.monotonic()
+            done.set()
+
+    worker = threading.Thread(target=initialize, name="tspotify-startup", daemon=True)
+    worker.start()
+    next_frame = started
+    try:
+        while True:
+            now = time.monotonic()
+            if result["error"]:
+                intro.status = "Не удалось загрузить клиент Spotify"
+            elif done.is_set():
+                intro.status = "Spotify готов · открываем плеер"
+            else:
+                intro.status = status() if status else "Подключаем клиент Spotify…"
+            if (
+                done.is_set()
+                and now >= started + DURATION
+                and now >= result["finished"] + READY_HOLD
+            ):
+                break
+            if now >= next_frame:
+                intro.draw(renderer, now)
+                next_frame = now + 1 / FPS
+            screen.timeout(max(1, min(50, int((next_frame - time.monotonic()) * 1000))))
+            try:
+                key = screen.get_wch()
+                if key == curses.KEY_RESIZE:
+                    intro.size = None
+                    next_frame = 0
+            except curses.error:
+                pass
+    except BaseException:
+        if cancel:
+            cancel()
+        worker.join(timeout=5)
+        raise
+    worker.join()
+    return result["error"]

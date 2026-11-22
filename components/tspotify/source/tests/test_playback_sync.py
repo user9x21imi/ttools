@@ -88,3 +88,36 @@ def test_stale_native_event_cannot_undo_fresh_phone_selection():
     backend.event = {"track_id": "previous", "position": 150000, "playing": True, "at": time.monotonic() - 5}
     phone = {"item": {"id": "selected"}, "progress_ms": 0, "_observed_at": time.monotonic()}
     assert backend.playback(phone)["item"]["id"] == "selected"
+
+
+def test_old_tspotify_device_from_web_api_cannot_replace_current_native_engine(monkeypatch):
+    from tspotify import auth
+
+    monkeypatch.setattr(auth, "access_token", lambda: "test")
+    api = Spotify()
+    api.idle = False
+    api.backend = SimpleNamespace(
+        observe_connect=True,
+        device_id="current",
+        event={},
+        playback=lambda _: {"item": {"id": "actual"}, "is_playing": True},
+    )
+    api.http.close()
+    api.http = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "device": {"id": "old", "name": "tspotify", "is_active": True},
+                    "item": {"id": "stale"},
+                    "is_playing": False,
+                },
+            )
+        )
+    )
+    try:
+        assert api.playback()["item"]["id"] == "actual"
+        assert not api.external
+        assert api.device_id != "old"
+    finally:
+        api.close()

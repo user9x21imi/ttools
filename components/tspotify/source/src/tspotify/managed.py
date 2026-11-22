@@ -30,19 +30,7 @@ def runtime_lock():
         yield
         return
     if os.name != "posix":
-        # ttools distribution adaptation: match the suite's Windows locking API.
-        import msvcrt
-        with (root / "run.lock").open("a+b") as stream:
-            stream.seek(0); stream.write(b"0"); stream.flush(); stream.seek(0)
-            try:
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
-                raise RuntimeError("tspotify is running or updating") from None
-            try:
-                yield
-            finally:
-                stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-        return
+        raise RuntimeError("Managed ttools runtime currently supports Linux only")
     import fcntl
 
     with (root / "run.lock").open("a+b") as stream:

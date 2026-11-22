@@ -537,3 +537,319 @@ def test_native_volume_does_not_call_web_api_even_during_rate_limit(api):
     assert calls == [("volume", 75)]
     assert api.current_volume == 75
     assert api.resume_data["volume"] == 75
+
+
+def test_slow_remote_observation_never_blocks_native_playback_poll(api):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    track = {"id": "cached", "duration_ms": 180000}
+    api.idle = False
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        _volume_active=True,
+        observe_connect=True,
+        event={},
+        playback=lambda _: {"item": track, "is_playing": True},
+    )
+
+    def slow_request(*args):
+        started.set()
+        release.wait(2)
+        return {}
+
+    api.request = slow_request
+    try:
+        before = time.monotonic()
+        assert api.playback()["item"]["id"] == "cached"
+        assert time.monotonic() - before < 0.1
+        assert started.wait(0.5)
+        before = time.monotonic()
+        assert api.playback()["item"]["id"] == "cached"
+        assert time.monotonic() - before < 0.1
+    finally:
+        release.set()
+
+
+def test_known_playlist_metadata_avoids_track_lookup_when_skipping(api):
+    track = {"id": "next", "duration_ms": 180000, "name": "Next"}
+    api.remember_tracks({"tracks": [track]})
+    api.backend = SimpleNamespace(
+        event={}, playback=lambda _: {"_pending_track_id": "next", "is_playing": True}
+    )
+    api.request = lambda *a: pytest.fail("Known metadata must not hit the network")
+    assert api.playback()["item"] == track
+
+
+def test_transient_gateway_failure_retries_idempotent_play_once(api):
+    calls = []
+
+    def respond(request):
+        calls.append(request.method)
+        return httpx.Response(502 if len(calls) == 1 else 204)
+
+    mock(api, respond)
+    api.request("PUT", "me/player/play", {"uris": ["spotify:track:t"]})
+    assert calls == ["PUT", "PUT"]
+
+
+def test_gateway_failure_never_replays_non_idempotent_skip(api):
+    calls = []
+    mock(api, lambda request: calls.append(request.method) or httpx.Response(502))
+    with pytest.raises(SpotifyError):
+        api.request("POST", "me/player/next")
+    assert calls == ["POST"]
+
+
+def test_native_selected_track_load_avoids_web_api_and_device_discovery(api):
+    calls = []
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_load=True,
+        device_id="local",
+        _events=lambda: None,
+        load_track=lambda *args: calls.append(args),
+        wait_playing=lambda *a, **kw: None,
+        preferred_volume=0,
+        muted=True,
+    )
+    api.request = lambda *a, **kw: pytest.fail("Native load must not call Web API")
+    api.start({"id": "a" * 22, "duration_ms": 180000}, context_uri="spotify:playlist:p")
+    assert calls == [("spotify:track:" + "a" * 22, "spotify:playlist:p", 0)]
+    assert api.last_playback["is_playing"]
+
+
+def test_native_load_passes_cached_queue_without_requesting_playlist(api):
+    queue = ["spotify:track:" + "a" * 22, "spotify:track:" + "b" * 22]
+    calls = []
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_load=True,
+        local_queue=True,
+        device_id="local",
+        _events=lambda: None,
+        load_track=lambda *args: calls.append(args),
+        wait_playing=lambda *a, **kw: None,
+        preferred_volume=0,
+        muted=True,
+    )
+    api.request = lambda *a, **kw: pytest.fail("Cached queue must not use Web API")
+    api.start({"id": "a" * 22, "duration_ms": 180000, "_queue_uris": queue})
+    assert calls[0][3] == queue
+
+
+def test_pre_activation_volume_is_applied_again_when_native_audio_becomes_active(api):
+    active, actual, commands = [False], [0], []
+
+    def control(command, value):
+        commands.append((command, value))
+        if active[0]:
+            actual[0] = value
+
+    api.idle = False
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_control=control,
+        muted=False,
+        unmute_after_user_volume=lambda _: None,
+        event={},
+        playback=lambda _: {"item": {"id": "t"}, "is_playing": True},
+    )
+    api.control("volume", 70)
+    assert actual[0] == 0
+    active[0] = True
+    api.playback()
+    assert actual[0] == 70
+    api.playback()
+    assert commands == [("volume", 70), ("volume", 70)]
+
+
+@pytest.mark.parametrize(
+    "command,initial,expected",
+    [
+        ("shuffle", False, 1),
+        ("shuffle", True, 0),
+        ("repeat", "off", 1),
+        ("repeat", "context", 2),
+        ("repeat", "track", 0),
+    ],
+)
+def test_native_modes_do_not_call_web_api(api, monkeypatch, command, initial, expected):
+    calls = []
+    state = {
+        "shuffle_state": initial if command == "shuffle" else False,
+        "repeat_state": initial if command == "repeat" else "off",
+    }
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_modes=True,
+        playback=lambda fallback: dict(state),
+        local_control=lambda *args: calls.append(args),
+    )
+    api.external = False
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(api, "request", lambda *a, **kw: pytest.fail("Native modes must not use Web API"))
+    api.control(command)
+    assert calls == [(command, expected)]
+
+
+def test_play_at_queue_end_uses_native_restart_and_keeps_actual_queue(api, monkeypatch):
+    calls = []
+    item = {"id": "ended", "name": "Ended"}
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        event={},
+        local_control=lambda *args: calls.append(args),
+        playback=lambda _: {"queue_ended": True, "item": item, "progress_ms": 400000, "is_playing": False},
+    )
+    api.idle = False
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(
+        api, "start", lambda *a, **kw: pytest.fail("Do not replace native queue with saved album")
+    )
+    api.control("play-pause")
+    assert calls == [("play",)]
+
+
+def test_uncached_native_album_keeps_context_instead_of_single_track_queue(api, monkeypatch):
+    calls = []
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_load=True,
+        local_queue=True,
+        _events=lambda: None,
+        load_track=lambda *a: calls.append(a),
+        wait_playing=lambda *a, **kw: None,
+        device_id="native",
+        event={},
+        muted=True,
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(api, "activate_output_volume", lambda: None)
+    api.start({"id": "a" * 22, "duration_ms": 180000}, context_uri="spotify:album:album")
+    assert calls == [("spotify:track:" + "a" * 22, "spotify:album:album", 0)]
+
+
+def test_jam_uses_native_session_and_returns_only_server_invitation(api, monkeypatch):
+    calls = []
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        native_jam=True,
+        local_control=lambda *args: calls.append(args),
+        request=lambda *args, **kwargs: {
+            "jam": {
+                "status": "ready",
+                "url": "https://spotify.link/realInvite",
+                "members": [{"name": "Host"}],
+            }
+        },
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(
+        api, "request", lambda *a, **kw: pytest.fail("Do not use Web API or construct track URLs")
+    )
+    value = api.start_jam()
+    assert calls == [("jam-start",)] and value["url"] == "https://spotify.link/realInvite"
+
+
+def test_jam_server_rejection_is_not_reported_as_created(api, monkeypatch):
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        native_jam=True,
+        local_control=lambda *args: None,
+        request=lambda *args, **kwargs: {"jam": {"status": "error", "message": "Forbidden"}},
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    with pytest.raises(SpotifyError, match="Forbidden"):
+        api.start_jam()
+
+
+@pytest.mark.parametrize("position,expected", [(180000, 0), (179500, 0), (12000, 12000)])
+@pytest.mark.parametrize("legacy_duration", [False, True])
+def test_restored_end_position_does_not_resume_final_millisecond(
+    api, monkeypatch, position, expected, legacy_duration
+):
+    item = {
+        "id": "a",
+        **({"duration": {"secs": 180, "nanos": 0}} if legacy_duration else {"duration_ms": 180000}),
+    }
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(api, "playback", lambda: {"item": item, "progress_ms": position})
+    calls = []
+    monkeypatch.setattr(api, "start", lambda *a, **kw: calls.append((a, kw)))
+    api.control("play-pause")
+    assert calls == [((item,), {"position_ms": expected})]
+
+
+def test_next_from_restored_session_selects_actual_next_cached_track(api, monkeypatch):
+    tracks = [{"id": "a", "type": "track"}, {"id": "b", "type": "track"}]
+    api.remember_tracks(tracks)
+    item = {"id": "a", "_queue_uris": ["spotify:track:a", "spotify:track:b"]}
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(api, "playback", lambda: {"item": item, "progress_ms": 180000})
+    calls = []
+    monkeypatch.setattr(api, "start", lambda *a, **kw: calls.append((a, kw)))
+    api.control("next")
+    assert calls[0][0][0]["id"] == "b" and calls[0][1]["position_ms"] == 0
+
+
+def test_repeat_waits_through_intermediate_native_confirmation(api, monkeypatch):
+    states = iter(
+        [
+            {"repeat_state": "context"},
+            {"repeat_state": "track", "modes_pending": True},
+            {"repeat_state": "track", "modes_pending": False},
+        ]
+    )
+    calls = []
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_modes=True,
+        native_snapshot={"queue_current_uri": "spotify:track:a"},
+        local_control=lambda *args: calls.append(args),
+        playback=lambda _: next(states),
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    assert "ожидает" not in api.control("repeat")
+    assert calls == [("repeat", 2)]
+    assert api.last_playback["repeat_state"] == "track"
+
+
+def test_repeat_does_not_accept_old_snapshot_even_if_pending_flag_cleared(api, monkeypatch):
+    states = iter(
+        [
+            {"repeat_state": "off"},
+            {"repeat_state": "off", "modes_pending": False},
+            {"repeat_state": "context", "modes_pending": False},
+        ]
+    )
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_modes=True,
+        native_snapshot={"queue_current_uri": "spotify:track:a"},
+        local_control=lambda *args: None,
+        playback=lambda _: next(states),
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+    api.control("repeat")
+    assert api.last_playback["repeat_state"] == "context"
+
+
+def test_atomic_modes_return_pending_target_without_waiting_for_streaming_loop(api, monkeypatch):
+    states = iter([{"repeat_state": "off"}, {"repeat_state": "context", "modes_pending": True}])
+    api.backend = SimpleNamespace(
+        local_enabled=True,
+        local_modes=True,
+        atomic_modes=True,
+        native_snapshot={"queue_current_uri": "spotify:track:a"},
+        local_control=lambda *args: None,
+        playback=lambda _: next(states),
+    )
+    monkeypatch.setattr(api, "ensure_engine", lambda: None)
+    monkeypatch.setattr(
+        time, "sleep", lambda _: pytest.fail("Atomic mode commands must not wait for native playback")
+    )
+    assert "ожидает" in api.control("repeat")
+    assert api.last_playback["repeat_state"] == "context"
