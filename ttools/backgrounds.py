@@ -51,6 +51,7 @@ class Background:
         self.logical=0.;self.started=0.;self.paused=not motion
         self.next_switch=self.random.uniform(30,120)
         self.cached=None;self.previous=None;self.last_render=-1.;self.size=None
+        self.accent='things';self.previous_accent='things';self.accent_started=0.;self.accent_duration=.12
     def advance(self,now):
         if not self.paused:self.logical+=max(0.,now-self.wall)
         self.wall=now
@@ -67,6 +68,20 @@ class Background:
     def toggle(self,now=None):
         self.advance(time.monotonic() if now is None else now)
         self.paused=not self.paused
+    def set_accent(self,accent,now=None,animate=True):
+        """Retarget the secondary layer without rebuilding either cached scene."""
+        now=time.monotonic() if now is None else now
+        if accent==self.accent:return
+        previous,current,mix=self.accent_mix(now)
+        self.previous_accent=current if mix>=.5 else previous
+        self.accent=accent
+        self.accent_started=now if animate else now-self.accent_duration
+    def accent_mix(self,now=None):
+        now=time.monotonic() if now is None else now
+        t=max(0.,min(1.,(now-self.accent_started)/self.accent_duration))
+        # Smoothstep keeps the 120 ms palette crossfade quiet at either end.
+        t=t*t*(3.-2.*t)
+        return self.previous_accent,self.accent,t
     def render(self,width,height,now=None):
         now=time.monotonic() if now is None else now
         self.advance(now)
@@ -81,13 +96,13 @@ class Background:
         base=self.scene.render(primary_w,primary_h,self.logical-self.started+13.)
         ox=width-primary_w;oy=max(0,round(height*.10))
         for y,row in enumerate(base.cells):
-            for x,(char,_) in enumerate(row):frame.cells[y+oy][x+ox]=(char,'#244ed7')
+            for x,(char,_) in enumerate(row):frame.cells[y+oy][x+ox]=(char,'primary')
         small_w=max(1,round(width*.25));small_h=max(1,round(height*.34))
         overlay=self.overlay.render(small_w,small_h,self.logical-self.started+5.)
         ox=width-small_w;oy=max(0,round(height*.15))
         for y,row in enumerate(overlay.cells):
             for x,(char,_) in enumerate(row):
-                if char!=' ':frame.cells[y+oy][x+ox]=(char,'#c96a98')
+                if char!=' ':frame.cells[y+oy][x+ox]=(char,'secondary')
         age=self.logical-self.started
         if self.previous is not None and age<self.TRANSITION:
             old=self.previous;mix=age/self.TRANSITION;merged=Frame(width,height)
