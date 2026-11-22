@@ -1,4 +1,10 @@
-TVPN 1.4.0 — ttools integration
+# TVPN 1.4.0 — ttools integration candidate (unreleased)
+
+This file records integration work that is not the version shipped by the
+current component bundle. The bundled and independently updatable component
+remains **1.3.1**, as declared by `VERSION`, `update.json`, and the TTools
+suite manifest. Do not publish or advertise 1.4.0 until its version metadata,
+artifact, checksum, and platform verification are prepared together.
 
 - Add user installation without launching the panel or connecting VPN: install.py --prefix PATH --no-launch.
 - Add explicit --defer-system for safe isolated tests (not a working VPN system setup).
