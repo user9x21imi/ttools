@@ -1,5 +1,5 @@
 """Exercise the shared VT frontend on POSIX; not a Windows host certification."""
-import os,sys,time,json,subprocess,tempfile,threading,struct
+import os,sys,time,json,subprocess,tempfile,threading,struct,shutil
 from pathlib import Path
 if os.name=='nt':raise SystemExit('Use run.cmd --demo on Windows; this PTY harness is for POSIX')
 import pty,fcntl,termios
@@ -22,24 +22,86 @@ with tempfile.TemporaryDirectory(prefix='Telegram UI тест ') as folder:
         while time.monotonic()<until:
             value=state()
             if predicate(value):return value
-            if process.poll() is not None:raise AssertionError('UI exited: '+output[-2000:].decode('utf-8','replace'))
+            if process.poll() is not None:
+                detail='UI exited: '+output[-6000:].decode('utf-8','replace')
+                error_file=folder/'tt-native-test-error'
+                if error_file.is_file():detail+='\nDemo exception:\n'+error_file.read_text(encoding='utf-8')
+                raise AssertionError(detail)
             time.sleep(.05)
-        raise AssertionError(value)
+        threads=folder/'tt-native-test-threads.txt'
+        detail=str(value)
+        if threads.is_file():detail+='\nThread stacks:\n'+threads.read_text(encoding='utf-8')
+        raise AssertionError(detail)
     def key(text):os.write(master,text.encode());time.sleep(.15)
+    def resize(rows,cols):
+        fcntl.ioctl(master,termios.TIOCSWINSZ,struct.pack('HHHH',rows,cols,rows*16,cols*8))
+        return wait(lambda s:s.get('sizes',{}).get('root')==[rows,cols])
     try:
-        wait(lambda s:s.get('count')==2);key('\x1b[6;16;8t');key('\r');wait(lambda s:s.get('mode')=='messages')
+        wait(lambda s:s.get('count')==18 and s.get('visible_chats',0)>0)
+        assert state()['visible_chats']==10,'chat list was not capped at ten visible rows'
+        list_screenshot=folder/'artifacts'/'chat-list.png';deadline=time.monotonic()+8
+        while not list_screenshot.is_file() and time.monotonic()<deadline:time.sleep(.05)
+        assert list_screenshot.is_file(),'chat-list screenshot was not captured'
+        for selected in range(1,13):
+            key('\x1b[B');wait(lambda s:s.get('mode')=='chats' and s.get('list_index')==selected)
+        assert state()['list_offset']>0,'chat list did not scroll with selection'
+        for selected in range(11,-1,-1):
+            key('\x1b[A');wait(lambda s:s.get('mode')=='chats' and s.get('list_index')==selected)
+        key('\x1b[6;16;8t');key('\r');opened=wait(lambda s:s.get('mode')=='messages' and s.get('history_count',0)>=120 and s.get('drawn_ids') and not s.get('pending'))
+        assert opened['visible_chats']==10,'conversation sidebar did not keep ten chats visible'
+        transitioned=wait(lambda s:s.get('transition_count',0)>=1)
+        assert opened['current_id']==10119,'synthetic history did not open at the newest message'
+        assert opened['sizes']['messages'][1]>opened['sizes']['chats'][1]*2,'conversation did not receive the larger panel'
+        assert {button[3] for button in opened['buttons']} >= {'send','document','voice'}
+        assert not ({'stickers','gif_gallery','forward'} & {button[3] for button in opened['buttons']}),'composer toolbar is not contextual'
+        screenshot=folder/'artifacts'/'conversation.png';deadline=time.monotonic()+8
+        while not screenshot.is_file() and time.monotonic()<deadline:time.sleep(.05)
+        threads=folder/'tt-native-test-threads.txt'
+        stack='\n'+threads.read_text(encoding='utf-8') if threads.is_file() else ''
+        report_error=folder/'tt-native-test-report-error.txt'
+        detail='\nReport error:\n'+report_error.read_text(encoding='utf-8') if report_error.is_file() else ''
+        assert screenshot.is_file(),'conversation screenshot was not captured: '+output[-3000:].decode('utf-8','replace')+detail+stack
+        from PIL import Image,ImageChops
+        with Image.open(screenshot) as image:assert image.size==(1400,810),'conversation screenshot used the wrong terminal size'
+        key('\x1b[A'*88);visible=wait(lambda s:s.get('current_id')==10031)
+        assert 10031 in visible['drawn_ids'],'long Unicode message left the visible history while selected'
+        resize(12,70);resize(45,140)
         key('\x16');key('CAPTION');wait(lambda s:s.get('attachments',{}).get('chat:101') and s.get('buffer')=='CAPTION')
         key('\r');sent=wait(lambda s:s.get('current_id')==20001 and not s.get('pending') and s.get('buffer')=='')
         time.sleep(1);assert state()['frames']<=sent['frames']+1,'progress-only events repainted history'
         key('\x1b[A');wait(lambda s:s.get('current_id')!=20001 and not s.get('pending'))
         key('\x1b[B');wait(lambda s:s.get('current_id')==20001 and not s.get('pending'))
-        key('\x0f');time.sleep(.3);key('\x1b');wait(lambda s:s.get('current_id')==20001 and not s.get('pending'))
-        key('\x0c');wait(lambda s:s.get('mode')=='chats');key('\r');wait(lambda s:s.get('mode')=='messages')
-        key('SAVED DRAFT');wait(lambda s:s.get('buffer')=='SAVED DRAFT');key('\x11');process.wait(timeout=5)
+        key('\x0f');time.sleep(.3);key('\x1b');wait(lambda s:s.get('current_id')==20001 and not s.get('overlay') and not s.get('pending'))
+        key('SAVED DRAFT');wait(lambda s:s.get('buffer')=='SAVED DRAFT')
+        long_text='Тест длинного сообщения 🙂 — English / русский. '*18
+        key(long_text);typed=wait(lambda s:s.get('buffer')=='SAVED DRAFT'+long_text)
+        assert typed['history_count']>=120
+        key('\x0c');wait(lambda s:s.get('mode')=='chats' and not s.get('pending'));key('\r');restored=wait(lambda s:s.get('mode')=='messages' and s.get('buffer')=='SAVED DRAFT'+long_text and not s.get('pending'))
+        key('\x11');process.wait(timeout=5)
         assert process.returncode==0,output[-3000:]
         assert '\x1bP0;0q' in output.decode('utf-8','replace'),'no SIXEL graphics emitted'
         assert (folder/'tt-native-test-session.json').is_file()
-        print('PASS: chat navigation, paste + caption, fake photo send, 100 progress updates without history repaint, scroll, settings return, chat list, draft save, Ctrl+Q, SIXEL output')
+        artifact_dir=Path(__file__).parent/'artifacts';artifact_dir.mkdir(exist_ok=True)
+        demo_artifacts=folder/'artifacts'
+        for name in ('chat-list.png','conversation.png'):
+            source=demo_artifacts/name
+            assert source.is_file(),f'missing synthetic screenshot: {name}'
+            shutil.copy2(source,artifact_dir/name)
+        frames=sorted((folder/'transition-frames').glob('frame-*.png'))
+        assert len(frames)>=4,f'chat reveal produced fewer than 4 timed frames (observed {len(frames)} after {transitioned.get("transition_count",0)} transition)'
+        images=[Image.open(path).convert('RGB') for path in frames]
+        message_region=(330,45,1200,670)
+        signatures={image.crop(message_region).tobytes() for image in images}
+        assert len(signatures)>=4,f'chat reveal produced only {len(signatures)} distinct message-region frames'
+        distinct_changes=0;previous=None
+        for image in images:
+            current=image.crop(message_region)
+            if previous is not None and ImageChops.difference(previous,current).getbbox():distinct_changes+=1
+            previous=current
+        assert distinct_changes>=3,f'chat reveal changed message content in only {distinct_changes} sampled intervals'
+        images[0].save(artifact_dir/'chat-transition.gif',save_all=True,append_images=images[1:],duration=65,loop=0,optimize=False)
+        assert restored['sizes']['root']==[45,140]
+        print('PASS: synthetic 120-message history, resize to compact terminal, long Unicode draft, contextual composer, chat navigation, paste + caption, fake photo send, 100 progress updates without history repaint, scroll, settings return, draft restore, Ctrl+Q and SIXEL output')
     finally:
         if process.poll() is None:process.terminate();process.wait(timeout=5)
         os.close(master)

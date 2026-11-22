@@ -12,9 +12,17 @@ class Core(unittest.TestCase):
     def test_windows_payload_extracts(self):
         with tempfile.TemporaryDirectory(prefix='Telegram тест ') as d:
             root=Path(d)
-            for wheel in (ROOT/'wheels').glob('*.whl'):manage.extract_wheel(wheel,root)
+            wheels=sorted((ROOT/'wheels').glob('*.whl'))
+            self.assertTrue(wheels,f'checked-in Windows wheelhouse is missing or empty: {ROOT / "wheels"}')
+            for wheel in wheels:manage.extract_wheel(wheel,root)
             self.assertTrue((root/'tg/__init__.py').is_file());self.assertTrue((root/'telegram/_native_tdjson.py').is_file())
             self.assertTrue(list(root.rglob('*.pyd')));self.assertTrue(list(root.rglob('*.exe')))
+    def test_checked_in_payload_is_complete(self):
+        manifest=manage.read(ROOT/'files.json')
+        missing=[name for name in manifest if not (ROOT/name).is_file()]
+        self.assertFalse(missing,'checked-in Windows payload is incomplete; missing manifest files: '+', '.join(missing))
+        try:manage.verify(ROOT)
+        except RuntimeError as error:self.fail(f'checked-in Windows payload failed its SHA-256 manifest: {error}')
     def test_verify_detects_tampering(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);p=root/'source.py';p.write_text('original');manage.write(root/'files.json',{'source.py':manage.digest(p)})

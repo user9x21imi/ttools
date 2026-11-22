@@ -10,6 +10,9 @@ class Engine:
     def __init__(self,controller):
         self.c=controller;self.s=controller.view.status;self.c.engine=self;self.s.engine=self
         self.query='';self.list_index=0;self.list_offset=0;self.focus='input';self.auto_restore=True;self.voices={}
+        self.c.view.chats.engine=self;self.c.view.msgs.engine=self
+        self.selection_animation=None;self.transition_started=0;self.transition_pending=False;self.transition_pending_since=0;self.chat_opened_wall=0;self.chat_grace_until=0
+        self.known_message_ids={};self.incoming_animation={};self.unread_animation={}
         self.c.view_mode='chats';self.s.controller=controller;self.s.active=False;self.s.draft_key=None
     @property
     def voice(self):return self.voices.get(self.s.draft_key)
@@ -42,11 +45,22 @@ class Engine:
         session_state.save(self.c)
     def chats(self):
         items=self.c.model.chats.chats
-        return [chat for chat in items if self.query.casefold() in chat.get('title','').casefold()]
+        query=self.query.casefold()
+        if not query:return items
+        found=[]
+        from render_layout import chat_preview
+        for chat in items:
+            title=str(chat.get('title',''))
+            preview=chat_preview(self.c.view.chats,chat)
+            if query in (title+' '+preview).casefold():found.append(chat)
+        return found
     def select_chat(self,step):
-        self.list_index=max(0,min(len(self.chats())-1,self.list_index+step));self.c.render_chats()
+        previous=self.list_index
+        self.list_index=max(0,min(len(self.chats())-1,self.list_index+step))
+        if self.list_index!=previous:self.selection_animation=(time.monotonic(),self.list_index)
+        self.c.render_chats()
     def open_list(self):
-        self.freeze_voice();self.save_draft();self.auto_restore=False
+        self.freeze_voice();self.save_draft();self.auto_restore=False;self.transition_pending=False;self.transition_started=0
         self.c.restore_ready=None;self.c.restore_chat_id=None
         from workspace_mode import set_mode
         set_mode('Чаты · Enter — открыть · Ctrl+O — настройки')
@@ -61,6 +75,8 @@ class Engine:
             if not items:return
             chat_id=items[min(self.list_index,len(items)-1)]['id']
         if not self.c.model.set_current_chat_by_id(chat_id):return
+        now=time.monotonic();self.chat_opened_wall=time.time();self.chat_grace_until=now+1.0
+        self.known_message_ids[chat_id]=set(getattr(self.c.model.msgs,'msg_ids',{}).get(chat_id,()))
         from workspace_mode import set_mode
         set_mode('Переписка · Ctrl+L — чаты · Ctrl+G — голосовое')
         self.c.view_mode='messages';self.focus='input';self.s.active=True;self.s.draft_key=f'chat:{chat_id}'
@@ -71,7 +87,53 @@ class Engine:
                 from voice_inline import InlineVoice
                 self.voices[self.s.draft_key]=InlineVoice.restore(self.c,item)
         from recovery import remember
-        remember(self.c);self.c.resize()
+        remember(self.c);self.c.resize();self.transition_started=0;self.transition_pending=True;self.transition_pending_since=time.monotonic()
+
+    def tick_animations(self):
+        if getattr(self.c,'_frame_pending',False) or getattr(self.c,'_drawing_frame',False):return True
+        now=time.monotonic();active=False;message_active=False;unread_active=False
+        if self.selection_animation and now-self.selection_animation[0]<.11:
+            active=True
+            if self.c.view_mode=='chats':
+                self.c._scene_signature=None
+                self.c.render_chats()
+        elif self.selection_animation:
+            self.selection_animation=None
+        for chat_id,started in list(self.unread_animation.items()):
+            if now-started>=.25:self.unread_animation.pop(chat_id,None)
+            else:active=True;unread_active=True
+        for message_id,started in list(self.incoming_animation.items()):
+            if now-started>=.20:self.incoming_animation.pop(message_id,None)
+            else:active=True;message_active=True
+        if self.transition_pending and self.c.view_mode=='messages':
+            chat_id=self.c.model.current_chat_id
+            ids=getattr(self.c.model.msgs,'msg_ids',{}).get(chat_id,())
+            loading=chat_id in getattr(self.c.model.msgs,'_history_loading',set())
+            ended=chat_id in getattr(self.c.model.msgs,'_history_ended',set())
+            ready=not loading and (bool(ids) or ended or now-self.transition_pending_since>=.25)
+            if ready:
+                self.transition_started=now;self.transition_pending=False
+            else:active=True
+        transition_frame=False;transition_finished=False
+        if self.transition_started:
+            from render_layout import CHAT_TRANSITION_SECONDS
+            if now-self.transition_started<CHAT_TRANSITION_SECONDS:
+                active=True;message_active=True;transition_frame=True
+            else:
+                self.transition_started=0;transition_finished=True
+        if (transition_frame or transition_finished) and self.c.view_mode=='messages':
+            self.c.render_msgs()
+        elif message_active and self.c.view_mode=='messages':
+            from render_layout import animate_messages
+            animate_messages(self.c,now)
+        if unread_active and self.c.view.chats.w:
+            view=self.c.view.chats
+            items=self.chats() if self.c.view_mode=='chats' else self.c.model.chats.chats
+            visible=getattr(view,'mouse_chats',[]);start=self.list_offset
+            selected=self.list_index if self.c.view_mode=='chats' else self.c.model.current_chat
+            from render_layout import draw_chats
+            draw_chats(view,max(0,selected-start),items[start:start+len(visible)])
+        return active
     def process_pending(self):
         key=self.s.pending_action;self.s.pending_action=None
         if key=='quit':
@@ -87,7 +149,11 @@ class Engine:
             if self.voice and self.voice.state=='review':self.voice.play()
             return
         if key=='voice_cancel':self.cancel_voice();return
-        if key=='settings':
+        if key=='remove_attachment':
+            from media import forget_attachment
+            items=self.s.attachments.get(self.s.draft_key,[]) if self.s.draft_key else []
+            if items:forget_attachment(items.pop())
+        elif key=='settings':
             self.freeze_voice()
             from settings import show
             show(self.c)
@@ -155,8 +221,10 @@ class Engine:
         _,left,_,width=getattr(chat_view,'panel_rect',(0,0,0,0))
         if chat_view.w and left<=x<left+width:
             visible=getattr(chat_view,'mouse_chats',[])
-            row=y-chat_view.win.getbegyx()[0]-1
-            if 0<=row<len(visible):self.open_chat(visible[row]['id'])
+            row=next((index for top,bottom,index in getattr(chat_view,'mouse_rows',[]) if top<=y<bottom),None)
+            if row is not None and 0<=row<len(visible):
+                if self.c.view_mode=='chats':self.list_index=self.list_offset+row
+                self.open_chat(visible[row]['id'])
             return
         if self.c.view_mode=='messages' and self.c.view.msgs.w:
             rows=[(row,index) for row,index in getattr(self.c.view.msgs,'_mouse_rows',[]) if row<=y]
@@ -209,7 +277,8 @@ class Engine:
             else:c.next_msg(amount)
             return
         if self.focus=='messages':
-            if key in ('\n',curses.KEY_ENTER):self.action('open')
+            if key in ('i','I'):self.focus='input';self.s.active=True
+            elif key in ('\n',curses.KEY_ENTER):self.action('open')
             elif key==' ':c._toggle_select_msg();c.render_msgs()
             return
         if key in ('\n','\r',curses.KEY_ENTER):self.send()
@@ -234,6 +303,7 @@ class Engine:
         start_bootstrap(self.c);self.c.resize()
         try:
             while self.c.is_running:
+                animating=self.tick_animations()
                 stop_file=os.environ.get('TTELEGRAM_STOP_FILE')
                 if stop_file and __import__('pathlib').Path(stop_file).exists():
                     path=__import__('pathlib').Path(stop_file)
@@ -246,7 +316,7 @@ class Engine:
                     if self.auto_restore:self.open_chat(wanted)
                 try:
                     if not (getattr(self.c,'_frame_pending',False) or getattr(self.c,'_drawing_frame',False)):self.s.paint()
-                    win=self.s.win;win.timeout(50 if self.voice and (self.voice.state=='recording' or self.voice.playing) else 150)
+                    win=self.s.win;win.timeout(50 if self.voice and (self.voice.state=='recording' or self.voice.playing) else (35 if animating else 150))
                     drawing=getattr(self.c,'_frame_pending',False) or getattr(self.c,'_drawing_frame',False)
                     if drawing:key=win.get_wch()
                     elif self.s.active and not self.voice:curses.curs_set(1);key=win.get_wch(1,min(getattr(self.s,'cursor',4),self.s.w-2))
@@ -303,10 +373,10 @@ def install():
         self._scene_signature=None
         rows,cols=self.view.stdscr.getmaxyx();reserved=min(7,max(1,rows-3));h=rows-reserved-1
         clear(self.view.stdscr)
-        sidebar=self.view_mode=='messages' and state().get('layout')=='sidebar'
-        chat_width=cols if self.view_mode=='chats' else (max(16,cols//4) if sidebar else 0)
+        sidebar=self.view_mode=='messages' and state().get('layout')=='sidebar' and cols>=82
+        chat_width=cols if self.view_mode=='chats' else (max(22,min(34,int(cols*.27))) if sidebar else 0)
         self._panels=[]
-        for view,width,x,title in ((self.view.chats,chat_width,0,'ЧАТЫ'),(self.view.msgs,cols-chat_width,chat_width,'ПЕРЕПИСКА')):
+        for view,width,x,title in ((self.view.chats,chat_width,0,''),(self.view.msgs,cols-chat_width,chat_width,'')):
             view.panel_rect=(1,x,h,width)
             view.h=max(1,h-2);view.w=max(1,width-2) if width else 0;view.x=x+1
             if width:
@@ -324,10 +394,12 @@ def install():
         if engine is None:return
         items=engine.chats() if self.view_mode=='chats' else self.model.chats.chats
         selected=engine.list_index if self.view_mode=='chats' else self.model.current_chat
-        size=max(1,self.view.chats.h-1)
+        engine.chat_count=len(items)
+        size=max(1,min(10,(self.view.chats.h-3)//2))
         engine.list_offset=min(max(0,selected-size+1),engine.list_offset) if selected<engine.list_offset else max(engine.list_offset,selected-size+1)
         start=max(0,min(engine.list_offset,max(0,len(items)-size)));engine.list_offset=start
-        self.view.chats.draw(max(0,selected-start),items[start:start+size],'Чаты · '+str(len(items)))
+        from render_layout import draw_chats
+        draw_chats(self.view.chats,max(0,selected-start),items[start:start+size],'Чаты · '+str(len(items)))
     controllers.Controller._render_chats=render_chats
     def render_msgs(self):
         if self.view_mode=='messages' and self.view.msgs.w:old_render_msgs(self)

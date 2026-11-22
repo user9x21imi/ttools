@@ -25,7 +25,7 @@ class Settings:
         import ui
         if self.tab==0:return read().get('mode','native')
         config=ui.state()
-        return str(config.get('theme',0)) if self.tab==1 else config.get('layout','full')
+        return str(config.get('theme',0)) if self.tab==1 else config.get('layout','sidebar')
     def apply(self,index):
         import ui
         options=self.options()

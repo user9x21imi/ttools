@@ -272,53 +272,14 @@ def install():
     def draw(self,current,msgs,padding,chat):
         if getattr(self,'gallery_active',False):return
         msgs=[(index,deepcopy(message)) for index,message in msgs]
-        self._mouse_rows=[];self._media_hitboxes=[]
-        begin_frame(self.win)
-        # Draw only real text. Never paint selected/reverse spaces through the
-        # bitmap reservation: those cells used to flash white on every refresh.
-        self.win.erase()
-        visible=self._collect_msgs_to_draw(current,msgs,padding)
-        for elements,selected,line_num in visible:
-            attrs=self._msg_attributes(selected,elements[1])
-            row=line_num;column=0
-            for attr,element in zip(attrs,elements):
-                for line_index,line in enumerate(element.split('\n')):
-                    if line_index:row+=1;column=0
-                    for char in line:
-                        char_width=views.string_len_dwc(char)
-                        if column+char_width>self.w:row+=1;column=0
-                        if 0<=row<self.h and not char.isspace():
-                            if row==self.h-1 and column+char_width>=self.w:self.win.insstr(row,column,char,attr)
-                            else:self.win.addstr(row,column,char,attr)
-                        column+=char_width
-                        if column>=self.w:row+=1;column=0
-        self.win.addstr(0,0,self._msg_title(chat),get_color(__import__('curses').COLOR_CYAN,-1)|__import__('curses').A_BOLD)
-        self._refresh()
-        self._draw_layout=visible
-        by_id={message['id']:message for _,message in msgs}
-        for elements,selected,line_num in visible:
-            message=by_id.get(getattr(elements,'message_id',None))
-            if message is None:continue
-            idx=elements.message_index
-            proxy=MsgProxy(message)
-            kind=proxy.content_type
-            path=media_path(proxy) if kind in ('photo','sticker','animation') else None
-            origin_y,origin_x=self.win.getbegyx()
-            self._mouse_rows.append((line_num+origin_y,idx))
-            if not path:continue
+        from render_layout import draw_messages
+        draw_messages(self,current,msgs,padding,chat)
+        for top,left,cols,rows,index,path in getattr(self,'_editorial_media',[]):
             try:
-                cols,rows=dimensions(path,min(80,max(8,self.w-6)),max(2,min(22,self.h//2)))
-                text=elements[3]
-                marker={'photo':'Фото','sticker':'Стикер','animation':'GIF'}[kind]+' / '
-                if marker not in text:continue
-                label_width=sum(views.string_len_dwc(e) for e in elements[:3])
-                before=text.rsplit(marker,1)[0].split('\n')
-                offset=sum((views.string_len_dwc(s)+(label_width if i==0 else 0))//self.w+1 for i,s in enumerate(before[:-1]))
-                top=line_num+offset+1
-                if top>=1 and top+rows<=self.h:
-                    self._media_hitboxes.append((top+origin_y,1+origin_x,rows,cols,idx))
-                    self._refresh();render(self.win,path,top,1,cols,rows)
-            except (OSError,ValueError,SyntaxError,subprocess.SubprocessError):continue
+                self._refresh()
+                render(self.win,path,top,left,cols,rows)
+            except (OSError,ValueError,SyntaxError,subprocess.SubprocessError):
+                continue
         self._refresh()
     views.MsgView._format_msg=format_msg;views.MsgView.draw=draw
     original_open=controllers.msg_handler['l']
