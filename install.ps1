@@ -3,7 +3,6 @@ param(
     [switch]$Preview,
     [string]$Prefix,
     [string]$Components,
-    [string]$BootstrapUrl,
     [switch]$LocalPackage,
     [switch]$DeferSystem,
     [switch]$DefinitionsOnly
@@ -20,11 +19,11 @@ $script:Python314Version = '3.14.10'
 $script:Python314InstallerSha256 = '92480239264744fe0386a1bd8275786fefa126e3129e56a68e22b52c73329965'
 $script:Python314InstallerUrl = 'https://www.python.org/ftp/python/3.14.10/python-3.14.10-amd64.exe'
 $script:BootstrapUrl = 'https://raw.githubusercontent.com/user9x21imi/ttools/main/bootstrap.py'
-if ($BootstrapUrl) {
-    if ($BootstrapUrl -notmatch '^https://raw\.githubusercontent\.com/user9x21imi/ttools/[0-9a-f]{40}/bootstrap\.py$') {
+if ($env:TTOOLS_BOOTSTRAP_URL) {
+    if ($env:TTOOLS_BOOTSTRAP_URL -notmatch '^https://raw\.githubusercontent\.com/user9x21imi/ttools/[0-9a-f]{40}/bootstrap\.py$') {
         throw 'BootstrapUrl must reference bootstrap.py at a full commit SHA in the official ttools repository.'
     }
-    $script:BootstrapUrl = $BootstrapUrl
+    $script:BootstrapUrl = $env:TTOOLS_BOOTSTRAP_URL
 }
 $script:PythonProbe = 'import sys,venv,ensurepip; print("%d.%d" % sys.version_info[:2])'
 

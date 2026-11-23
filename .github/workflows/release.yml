@@ -142,7 +142,9 @@ jobs:
           Pop-Location
           $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
           $candidateBootstrap = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/bootstrap.py"
-          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings -BootstrapUrl $candidateBootstrap
+          $env:TTOOLS_BOOTSTRAP_URL = $candidateBootstrap
+          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings
+          Remove-Item Env:TTOOLS_BOOTSTRAP_URL
           $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
           if (-not (Test-Path -LiteralPath $remoteLauncher -PathType Leaf)) { throw 'PowerShell install did not create the ttools command shim.' }
           $remoteApps = & $remoteLauncher --list | Out-String
