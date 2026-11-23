@@ -102,7 +102,9 @@ jobs:
           $package = Join-Path $env:RUNNER_TEMP 'TTools пакет с пробелами'
           $prefix = Join-Path $env:RUNNER_TEMP 'TTools установка с пробелами'
           Expand-Archive -LiteralPath $archive -DestinationPath $package
-          Push-Location $package
+          $packageRoot = Join-Path $package 'ttools'
+          if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'Install-ttools.cmd') -PathType Leaf)) { throw 'Windows ZIP layout is missing ttools/Install-ttools.cmd.' }
+          Push-Location $packageRoot
           $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -Components tthings'
           $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
           & $env:ComSpec /d /c $line
@@ -122,6 +124,7 @@ jobs:
           if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne '{"keep":"repeat-install"}') { throw 'Repeat ZIP install changed user data.' }
           $env:TTOOLS_AUTOUPDATE = '0'
           $launcher = Join-Path $prefix 'bin/ttools.cmd'
+          if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'ZIP install did not create the ttools command shim.' }
           $apps = & $launcher --list | Out-String
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($apps -notmatch '(?m)^tthings\s') { throw 'Installed launcher did not list tthings.' }
@@ -133,6 +136,7 @@ jobs:
           $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
           & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings
           $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
+          if (-not (Test-Path -LiteralPath $remoteLauncher -PathType Leaf)) { throw 'PowerShell install did not create the ttools command shim.' }
           $remoteApps = & $remoteLauncher --list | Out-String
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ($remoteApps -notmatch '(?m)^tthings\s') { throw 'PowerShell-installed launcher did not list tthings.' }
