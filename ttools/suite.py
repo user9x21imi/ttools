@@ -216,6 +216,43 @@ def stop_previous_background_apps(state):
             run([sys.executable,dest/'manage.py','stop','--timeout','30'],env=env)
 
 
+def configure_tvpn_system(release,target):
+    """Apply the versioned TVPN system integration only after suite activation."""
+    release=Path(release)
+    dest=release/'apps/tvpn'
+    if target=='linux-x86_64':
+        run(['bash',dest/'install-passwordless.sh'])
+    elif target.startswith('macos-'):
+        run(['bash',dest/'platforms/macos/install.sh'])
+    elif target=='windows-x86_64':
+        run(['powershell.exe','-NoProfile','-File',release/'scripts/setup-vpn-windows.ps1',
+             '-Setup',dest/'platforms/windows/install.ps1'])
+    else:
+        raise RuntimeError(f'No TVPN system setup for {target}')
+
+
+def _validate_release_state(prefix,state):
+    """Validate a versioned suite pointer before it can become active again."""
+    releases=(prefix/'releases').resolve()
+    try:
+        release=Path(state['release']).resolve()
+        if not release.is_relative_to(releases):
+            raise ValueError
+        manifest=json.loads((release/'bundle.json').read_text(encoding='utf-8'))
+    except (KeyError,OSError,ValueError,TypeError) as error:
+        raise RuntimeError('Suite release metadata is missing or outside the managed prefix') from error
+    if (manifest.get('app_id')!='ttools' or manifest.get('version')!=state.get('version')
+            or manifest.get('platform')!=state.get('platform')
+            or manifest.get('source_commit')!=state.get('source_commit')
+            or not isinstance(manifest.get('files'),dict)):
+        raise RuntimeError('Suite release metadata does not match its activation state')
+    for name,expected in manifest['files'].items():
+        path=(release/name).resolve()
+        if not path.is_relative_to(release) or not path.is_file() or digest(path)!=expected:
+            raise RuntimeError(f'Suite release file does not match its manifest: {name}')
+    return release
+
+
 def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=False,shortcuts=True):
     bundle=Path(bundle).resolve();prefix=prefix_path(prefix)
     manifest=verify_bundle(bundle)
@@ -242,8 +279,12 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             # An inactive completed release may still be a rollback target. Never remove it.
             release=prefix/'releases'/(build_id+'-'+str(time.time_ns()))
         release.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copytree(bundle,release)
+        state_committed=False
+        tvpn_setup_attempted=False
         try:
+            # Keep an incomplete copy out of the active catalog and remove it
+            # on ENOSPC just like any later installer failure.
+            shutil.copytree(bundle,release)
             # The launcher needs windows-curses; Unix ships curses with Python.
             if os.name=='nt':
                 launcher_python=create_venv(release/'launcher-venv')
@@ -251,7 +292,9 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             else:launcher_python=Path(sys.executable)
             apps=[]
             for app in proposed['install']:
-                command,env=install_component(app,release,defer_system)
+                # Protected TVPN files are changed after every fallible
+                # component install and after the candidate state is written.
+                command,env=install_component(app,release,defer_system or app=='tvpn')
                 app_manifest=release/'components'/app/'app.json'
                 app_name=json.loads(app_manifest.read_text(encoding='utf-8')).get('name',app) if app_manifest.is_file() else app
                 apps.append({'id':app,'name':app_name,'version':proposed['versions'][app],
@@ -266,14 +309,27 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             # Prevent an unbounded nested history in state.json.
             if old and 'previous' in old:old.pop('previous')
             atomic_json(state_path,state)
+            state_committed=True
             try:
                 _write_shortcuts(prefix,shortcuts,proposed['install'])
             except BaseException:
                 if old:atomic_json(state_path,old)
                 else:state_path.unlink(missing_ok=True)
+                state_committed=False
                 raise
+            if 'tvpn' in proposed['install'] and not defer_system:
+                tvpn_setup_attempted=True
+                configure_tvpn_system(release,target)
         except BaseException:
-            # TVPN's own installer rolls back protected files before returning an error.
+            if state_committed:
+                if old:atomic_json(state_path,old)
+                else:state_path.unlink(missing_ok=True)
+            # TVPN's Linux helper is transactional; when an older suite exists,
+            # reapply its protected backend if platform setup failed partway.
+            if tvpn_setup_attempted and old and 'tvpn' in old.get('options',{}).get('components',[]) and not old.get('options',{}).get('defer_system',False):
+                try:configure_tvpn_system(Path(old['release']),old['platform'])
+                except BaseException as restore_error:
+                    raise RuntimeError(f'TVPN setup failed and the previous protected backend could not be restored: {restore_error}') from restore_error
             shutil.rmtree(release,ignore_errors=True)
             raise
         print(json.dumps({'installed':state['version'],'complete':state['complete'],'unsupported':state['unsupported'],'prefix':str(prefix)},ensure_ascii=False))
@@ -326,9 +382,13 @@ def update(prefix,force=False,automatic=False,remote=None):
             # Installation uses a fresh process after releasing the suite lock.
             pending=prefix/'pending'
             candidate=prefix/('.pending-'+str(time.time_ns()))
-            shutil.copytree(bundle,candidate)
-            if pending.exists():shutil.rmtree(pending)
-            candidate.rename(pending)
+            try:
+                shutil.copytree(bundle,candidate)
+                if pending.exists():shutil.rmtree(pending)
+                candidate.rename(pending)
+            except BaseException:
+                shutil.rmtree(candidate,ignore_errors=True)
+                raise
     options=state['options']
     components=list(options['components'])
     if (state.get('platform')=='linux-x86_64'
@@ -342,7 +402,13 @@ def update(prefix,force=False,automatic=False,remote=None):
     if options['allow_partial']:argv.append('--allow-partial')
     if options['defer_system']:argv.append('--defer-system')
     if not options['shortcuts']:argv.append('--no-shortcuts')
-    run(argv)
+    try:
+        run(argv)
+    finally:
+        # The installer has copied verified bytes into releases before it
+        # exits. Keep neither a stale verified package nor a failed candidate
+        # in the staging slot after the process boundary.
+        shutil.rmtree(prefix/'pending',ignore_errors=True)
     return True
 
 
@@ -351,10 +417,30 @@ def rollback(prefix):
     with locked(prefix):
         state=json.loads((prefix/'state.json').read_text(encoding='utf-8'))
         previous=state.get('previous')
-        if not previous or not Path(previous['release']).is_dir():raise RuntimeError('No previous suite release')
-        if 'tvpn' in state['options']['components']:
-            raise RuntimeError('TVPN protected backend needs its own verified rollback; suite rollback with TVPN is disabled')
-        atomic_json(prefix/'state.json',previous)
+        if not previous:raise RuntimeError('No previous suite release')
+        active_release=_validate_release_state(prefix,state)
+        previous_release=_validate_release_state(prefix,previous)
+        current_options=state.get('options',{})
+        previous_options=previous.get('options',{})
+        current_tvpn='tvpn' in current_options.get('components',[])
+        previous_tvpn='tvpn' in previous_options.get('components',[])
+        current_system=current_tvpn and not current_options.get('defer_system',False)
+        previous_system=previous_tvpn and not previous_options.get('defer_system',False)
+        if current_system and not previous_tvpn:
+            raise RuntimeError('Cannot roll back TVPN system files: the previous suite has no TVPN package')
+        if current_system and previous_tvpn and not previous_system:
+            raise RuntimeError('Cannot safely restore TVPN: the previous suite deferred system setup')
+        stop_previous_background_apps(state)
+        if previous_system:
+            configure_tvpn_system(previous_release,previous['platform'])
+        try:
+            atomic_json(prefix/'state.json',previous)
+        except BaseException:
+            if previous_system and current_system:
+                try:configure_tvpn_system(active_release,state['platform'])
+                except BaseException as restore_error:
+                    raise RuntimeError(f'Suite state rollback failed and the active TVPN backend could not be restored: {restore_error}') from restore_error
+            raise
         print('Previous suite activated; user data preserved.')
 
 

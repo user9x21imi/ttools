@@ -113,23 +113,35 @@ class ReleaseMetadataQATests(unittest.TestCase):
                 self.assertEqual(suite.launch_installed(prefix, ['--app', 'tthings']), 0)
             update.assert_called_once_with(prefix.resolve(), automatic=True)
 
-    def test_default_suite_rollback_keeps_tvpn_guard_and_active_state(self):
+    def test_suite_rollback_restores_previous_tvpn_release_and_state(self):
         with tempfile.TemporaryDirectory(prefix='ttools-tvpn-rollback-') as temporary:
             prefix = Path(temporary)
             active = prefix / 'releases/active'
             previous = prefix / 'releases/previous'
             active.mkdir(parents=True)
             previous.mkdir()
-            prior = {'version': '1.0.0', 'release': str(previous),
+            for release, version in ((active,'1.0.1'),(previous,'1.0.0')):
+                payload=release/'payload.txt'
+                payload.write_text(version,encoding='utf-8')
+                manifest={'schema_version':1,'app_id':'ttools','version':version,
+                          'platform':distribution.platform_id(),
+                          'files':{'payload.txt':distribution.digest(payload)}}
+                (release/'bundle.json').write_text(json.dumps(manifest),encoding='utf-8')
+            prior = {'schema_version':1,'version': '1.0.0','platform':distribution.platform_id(),
+                     'release': str(previous),
                      'options': {'components': ['tspotify', 'tsoundcloud', 'ttelegram', 'tthings', 'tvpn']}}
-            state = {'version': '1.0.1', 'release': str(active),
+            state = {'schema_version':1,'version': '1.0.1','platform':distribution.platform_id(),
+                     'release': str(active),
                      'options': {'components': ['tspotify', 'tsoundcloud', 'ttelegram', 'tthings', 'tvpn']},
                      'previous': prior}
             state_path = prefix / 'state.json'
             state_path.write_text(json.dumps(state), encoding='utf-8')
-            with self.assertRaisesRegex(RuntimeError, 'TVPN protected backend'):
+            with patch.object(suite,'stop_previous_background_apps') as stop, \
+                    patch.object(suite,'configure_tvpn_system') as configure:
                 suite.rollback(prefix)
-            self.assertEqual(json.loads(state_path.read_text(encoding='utf-8')), state)
+            self.assertEqual(json.loads(state_path.read_text(encoding='utf-8')), prior)
+            stop.assert_called_once_with(state)
+            configure.assert_called_once_with(previous,distribution.platform_id())
 
 
 if __name__ == '__main__':
