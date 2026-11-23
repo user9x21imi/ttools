@@ -141,7 +141,7 @@ class ReleaseMetadataQATests(unittest.TestCase):
                 suite.rollback(prefix)
             self.assertEqual(json.loads(state_path.read_text(encoding='utf-8')), prior)
             stop.assert_called_once_with(state)
-            configure.assert_called_once_with(previous,distribution.platform_id())
+            configure.assert_called_once_with(previous.resolve(),distribution.platform_id())
 
 
 if __name__ == '__main__':
