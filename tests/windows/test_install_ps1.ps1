@@ -142,6 +142,11 @@ try {
     $script:Prefix = 'C:\Users\Тест\TTools Suite'
     $script:Components = 'tthings'
     Assert-Equal @('--allow-partial','--preview','--prefix',$script:Prefix,'--components','tthings') (Get-InstallerArguments) 'Installer flags or Unicode Prefix were not forwarded.'
+    $script:AllowPartial = $false
+    $script:Preview = $false
+    $script:Prefix = $null
+    $script:Components = $null
+    Assert-Equal @('--allow-partial') (Get-InstallerArguments) 'A default Windows install did not select the supported partial suite.'
 
     $standard = Join-Path $script:FixtureRoot 'Programs\Python\Python314\python.exe'
     New-Item -ItemType Directory -Path (Split-Path -Parent $standard) -Force | Out-Null

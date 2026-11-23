@@ -360,7 +360,9 @@ function Get-OrInstallPython314 {
 
 function Get-InstallerArguments {
     $arguments = @()
-    if ($AllowPartial) { $arguments += '--allow-partial' }
+    # Windows does not ship SoundCloud; install every supported Windows app
+    # by default instead of making the normal install fail on that component.
+    $arguments += '--allow-partial'
     if ($Preview) { $arguments += '--preview' }
     if ($Prefix) { $arguments += @('--prefix', $Prefix) }
     if ($Components) { $arguments += @('--components', $Components) }
@@ -383,7 +385,6 @@ function Invoke-TToolsInstall {
                 throw 'The local package is incomplete. Extract the complete Windows release ZIP before running Install-ttools.cmd.'
             }
             $arguments = @($scriptPath) + (Get-InstallerArguments)
-            if (-not $AllowPartial) { $arguments += '--allow-partial' }
         } else {
             $scriptPath = Join-Path $work 'bootstrap.py'
             Invoke-WebRequest -UseBasicParsing -Uri $script:BootstrapUrl -OutFile $scriptPath -ErrorAction Stop

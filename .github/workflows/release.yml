@@ -95,7 +95,7 @@ jobs:
         with:
           name: ttools-release
           path: ${{ runner.temp }}/ttools-release
-      - name: Install from release ZIP and launch ttools plus an app
+      - name: Install from release ZIP and PowerShell, verify state, launch and return
         shell: pwsh
         run: |
           $archive = Join-Path $env:RUNNER_TEMP 'ttools-release/ttools-windows-x86_64.zip'
@@ -103,26 +103,42 @@ jobs:
           $prefix = Join-Path $env:RUNNER_TEMP 'TTools установка с пробелами'
           Expand-Archive -LiteralPath $archive -DestinationPath $package
           Push-Location $package
-          $line = 'Install-ttools.cmd -Preview -AllowPartial -Prefix "' + $prefix + '" -Components tthings'
+          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -Components tthings'
           $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
           & $env:ComSpec /d /c $line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $statePath = Join-Path $prefix 'state.json'
+          if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw 'ZIP install did not create state.json.' }
+          $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+          if (-not (Test-Path -LiteralPath (Join-Path $prefix 'runner.py') -PathType Leaf)) { throw 'ZIP install did not create runner.py.' }
+          if (-not ($state.options.components -contains 'tthings')) { throw 'The active release does not include tthings.' }
+          $bundle = Get-Content -LiteralPath (Join-Path $state.release 'bundle.json') -Raw | ConvertFrom-Json
+          if ($state.version -ne $bundle.version) { throw 'The active release does not match its bundle manifest.' }
+          $sentinelPath = Join-Path $prefix 'user-data/qa-sentinel.json'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $sentinelPath) -Force | Out-Null
+          Set-Content -LiteralPath $sentinelPath -Value '{"keep":"repeat-install"}' -NoNewline
           & $env:ComSpec /d /c $line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne '{"keep":"repeat-install"}') { throw 'Repeat ZIP install changed user data.' }
           $env:TTOOLS_AUTOUPDATE = '0'
           $launcher = Join-Path $prefix 'bin/ttools.cmd'
-          & $launcher --list
+          $apps = & $launcher --list | Out-String
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($apps -notmatch '(?m)^tthings\s') { throw 'Installed launcher did not list tthings.' }
           & $launcher --app tthings --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $launcher --list
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Pop-Location
           $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
-          $remoteInstaller = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'install.ps1')))
-          & $remoteInstaller -Preview -AllowPartial -Prefix $remotePrefix -Components tthings
+          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings
           $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
-          & $remoteLauncher --list
+          $remoteApps = & $remoteLauncher --list | Out-String
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($remoteApps -notmatch '(?m)^tthings\s') { throw 'PowerShell-installed launcher did not list tthings.' }
           & $remoteLauncher --app tthings --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $remoteLauncher --list
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host 'Release ZIP and remote installs, repeat install, ttools launcher, and tthings launch all passed.'
   publish:
