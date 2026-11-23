@@ -1,9 +1,19 @@
-import sys,unittest,tempfile,zipfile,json,io
+import sys,unittest,tempfile,zipfile,json,io,importlib.util
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'source'))
 import manage,vtcurses as vt
+import render_layout as windows_layout
+REPO_ROOT=next(parent for parent in ROOT.parents if (parent/'components/ttelegram/source/render_layout.py').is_file())
+linux_layout_spec=importlib.util.spec_from_file_location('linux_ttelegram_render_layout',REPO_ROOT/'components/ttelegram/source/render_layout.py')
+linux_layout=importlib.util.module_from_spec(linux_layout_spec);linux_layout_spec.loader.exec_module(linux_layout)
 class Core(unittest.TestCase):
+    def test_four_stage_transition_is_consistent_across_backends(self):
+        for layout in (linux_layout,windows_layout):
+            count=layout.CHAT_TRANSITION_STATE_COUNT
+            states=[layout.chat_transition_state(layout.CHAT_TRANSITION_SECONDS*(index+.1)/count) for index in range(count)]
+            self.assertEqual(states,list(range(4)))
+            self.assertEqual(len(layout.CHAT_TRANSITION_GLYPHS),4)
     def test_wheel_traversal(self):
         with tempfile.TemporaryDirectory(prefix='Telegram тест ') as d:
             root=Path(d);wheel=root/'bad.whl'

@@ -122,6 +122,9 @@ class Engine:
             else:
                 self.transition_started=0;transition_finished=True
         if (transition_frame or transition_finished) and self.c.view_mode=='messages':
+            # The scene signature tracks model data, while the transition is
+            # time-driven. Invalidate it so each animation step reaches VT.
+            self.c._scene_signature=None
             self.c.render_msgs()
         elif message_active and self.c.view_mode=='messages':
             from render_layout import animate_messages
