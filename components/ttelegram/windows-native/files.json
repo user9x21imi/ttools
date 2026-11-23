@@ -79,7 +79,7 @@
   "source/platform_tools.py": "85549865a659a2655615e64e675af396075900f7cb10ac0e6640f2bf3912c19c",
   "source/process_control.py": "af0a2519de89977360f3c530a845db59843e5a07da2bfa66128057706948d2d0",
   "source/recovery.py": "f2454a2d8ddedab0a1af94901f1a8cdb01fac24447f0c5ddb83f685e36e78d7a",
-  "source/render_layout.py": "627512540de3a2e018881ee890818bd1d2ee8f0de00cf26b2ef755433443b92e",
+  "source/render_layout.py": "22029ddaec87bcafdd2c2c359cf18e73737217111b7361206d2998e696e26717",
   "source/restart_client.py": "14152c31cee02e068a31d6e73193fb85efee21fc20da65c8882327e6482da0ad",
   "source/runtime.py": "0c446c57d499631e5779eb13b5f86bf331013e882f1efd98796defc2d4484e17",
   "source/scene.py": "7b22659da45327ba3252a1c71dd167a438e59353050d1cb86bc79aa165130633",
@@ -114,9 +114,9 @@
   "tests/artifacts/chat-list.png": "716036e95a0f44720217ead498aacbc158e9d06711b94683bb6afe9b54dd7e43",
   "tests/artifacts/chat-transition.gif": "53d0cdd555fc2208696deb2be45646b2f0258a6f88599955aa7de3bddad200fb",
   "tests/artifacts/conversation.png": "e4836d59156362e05d65ebd4e1e639721add09afae542b65bc8061a2bdae905b",
-  "tests/smoke_ui_pty.py": "2896227df26935e5828e3854f65ace294f69cfd09bb185088cb054736447bf81",
+  "tests/smoke_ui_pty.py": "83115c489cdd26ee1d49cb7df5df24e2f3fc33e02750576a8a5240c768a96431",
   "tests/test_audio.py": "1f6d560cb18dd38fe0df4befe462c1a11f9a4e82f4d121fe7e8698c3620802ab",
-  "tests/test_core.py": "b80165e8a365c5520abf4664b8f4d54cad21f6e973867e7ebb73c202f6c8e4fa",
+  "tests/test_core.py": "e3fce692f1a7b5198aeb139d4cd85f57fca1e2ddf5f8358c505c1e78ee97e5ae",
   "tests/test_install_simulation.py": "a5e8863de72be4f8a0c83e4699207cc75c4414b3ccf1d5e37aa46a442f4f0484",
   "wheels/cffi-2.1.1-cp314-cp314-win_amd64.whl": "3222ba5d678f80a030e6afbcc33dc1ae5cb45facabb61cee2c7016b8432fde48",
   "wheels/imageio_ffmpeg-0.6.0-py3-none-win_amd64.whl": "02fa47c83703c37df6bfe4896aab339013f62bf02c5ebf2dce6da56af04ffc0a",
@@ -129,5 +129,6 @@
   "wheels/standard_mailcap-3.13.0-py3-none-any.whl": "4f509e11cb5a4700e91118630447643398b183ff3bb734011c8c030b3d671f0a",
   "wheels/tdjson-1.8.66-cp314-cp314-win_amd64.whl": "4d050b331e85ea3af225355981da0aef58a2cf547ba58d482662f42a1bcdef97",
   "wheels/telegram_text-0.2.0-py3-none-any.whl": "5752744dc5f91f3f7f0ec1becbf10adb86d586d9338e0aef74fd76a7261283ca",
-  "wheels/tg-0.26.0-py3-none-any.whl": "fae9ce6094107ae2b0bb6ccd2e31c5e5c67678f267cad2bbb6c7c1f2e3ac6f0e"
+  "wheels/tg-0.26.0-py3-none-any.whl": "fae9ce6094107ae2b0bb6ccd2e31c5e5c67678f267cad2bbb6c7c1f2e3ac6f0e",
+  "source/chat_transition.py": "0c83d3d0255a74d913a478c2e8613ae4ebd5faec1a24e873eb904a3bf9b8bd4d"
 }

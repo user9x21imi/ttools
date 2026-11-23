@@ -74,10 +74,10 @@ with tempfile.TemporaryDirectory(prefix='Telegram UI тест ') as folder:
         key('\x1b[A'*88);visible=wait(lambda s:s.get('current_id')==10031)
         assert 10031 in visible['drawn_ids'],'long Unicode message left the visible history while selected'
         resize(24,80)
-        compact=state()
+        compact=wait(lambda s:s.get('sizes',{}).get('root')==[24,80] and s.get('input_y',99)<24)
         assert compact['sizes']['root']==[24,80] and compact['input_y']<24,'80x24 terminal lost the composer'
         resize(40,120)
-        medium=state()
+        medium=wait(lambda s:s.get('sizes',{}).get('root')==[40,120] and s.get('input_y',99)<40)
         assert medium['sizes']['root']==[40,120] and medium['input_y']<40,'120x40 terminal lost the composer'
         resize(12,70);resize(45,140)
         key('\x16');key('CAPTION');wait(lambda s:s.get('attachments',{}).get('chat:101') and s.get('buffer')=='CAPTION')

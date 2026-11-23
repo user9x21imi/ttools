@@ -14,6 +14,7 @@ REVIEWED_OVERRIDES=(
     'source/composer.py',
     'source/engine.py',
     'source/media.py',
+    'source/chat_transition.py',
     'source/render_layout.py',
     'source/settings.py',
     'source/ui.py',
@@ -71,7 +72,9 @@ def apply_integration_fixes(destination,inventory):
             checksums[name]=None
     for name in REVIEWED_OVERRIDES:
         source=overrides/name
-        shutil.copy2(source,destination/name)
+        target=destination/name
+        target.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy2(source,target)
         inventory[name]=digest(destination/name)
         checksums[name]=inventory[name]
     if any(inventory[name]!=checksums[name] for name in inventory):

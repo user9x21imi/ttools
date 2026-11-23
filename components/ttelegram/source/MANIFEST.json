@@ -28,9 +28,10 @@
   "workspace_mode.py": "cbff38047ea380163e8dbeb65b924a6f329e62d1e38d64912b89b541663ab09a",
   "recovery.py": "ab9f354cea5d263b7cadfb2f677f1f7630a060fe8be459411486eaaf210c10d7",
   "VERSION": "aacf7df3623b5fb7e7ea21c7056d5200cf353d2518919b13da0704f412d59e9d",
-  "render_layout.py": "627512540de3a2e018881ee890818bd1d2ee8f0de00cf26b2ef755433443b92e",
+  "render_layout.py": "22029ddaec87bcafdd2c2c359cf18e73737217111b7361206d2998e696e26717",
   "vendor/patch.json": "dd2f86623da40c6646af840816b9be3a055e927588df7add4ae0d2286f41bde1",
   "vendor/views.py": "987854fc813bdf3405c775c205ef920b6a0e0775475fca0d672cbe5639be9b04",
   "vendor/TG-LICENSE.txt": "e6ed00f783298a62191aa609661ed3e06ecf3c569e4e3d520dc053b7eff7b49a",
-  "vendor/tg-0.26.0-views.patch": "145b56a93896675fb9bcaae5dddff6ce64e4fa1127ccd04c80e85e1970b8f6ba"
+  "vendor/tg-0.26.0-views.patch": "145b56a93896675fb9bcaae5dddff6ce64e4fa1127ccd04c80e85e1970b8f6ba",
+  "chat_transition.py": "0c83d3d0255a74d913a478c2e8613ae4ebd5faec1a24e873eb904a3bf9b8bd4d"
 }
