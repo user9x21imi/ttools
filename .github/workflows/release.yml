@@ -71,6 +71,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/windows/test_live_dependencies.ps1 -InstallVerifiedPythonFallback
+      - name: Read-only dependency diagnostic with Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/Diagnose-TTools.ps1
+      - name: Read-only dependency diagnostic with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/Diagnose-TTools.ps1
       - name: Preview platform installation plan
         run: python installer.py --plan --allow-partial
   package:
@@ -112,11 +120,15 @@ jobs:
           Expand-Archive -LiteralPath $archive -DestinationPath $package
           $packageRoot = Join-Path $package 'ttools'
           if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'Install-ttools.cmd') -PathType Leaf)) { throw 'Windows ZIP layout is missing ttools/Install-ttools.cmd.' }
+          if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'scripts/Diagnose-TTools.ps1') -PathType Leaf)) { throw 'Windows ZIP is missing the read-only dependency diagnostic.' }
           Push-Location $packageRoot
-          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -DeferSystem'
+          $zipLog = Join-Path $env:RUNNER_TEMP 'TTools журнал с пробелами.log'
+          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -DeferSystem -LogPath "' + $zipLog + '"'
           $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
           & $env:ComSpec /d /c $line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $zipLog -PathType Leaf)) { throw 'ZIP installer did not create the requested PowerShell transcript.' }
+          if ((Get-Content -LiteralPath $zipLog -Raw) -notmatch 'Detailed installer log enabled\.') { throw 'ZIP installer transcript did not capture the installer session.' }
           $statePath = Join-Path $prefix 'state.json'
           if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw 'ZIP install did not create state.json.' }
           $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
@@ -135,6 +147,7 @@ jobs:
           & $env:ComSpec /d /c $line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne '{"keep":"repeat-install"}') { throw 'Repeat ZIP install changed user data.' }
+          if ((Get-Item -LiteralPath $zipLog).Length -le 0) { throw 'ZIP installer transcript is empty after repeat installation.' }
           $env:TTOOLS_AUTOUPDATE = '0'
           $launcher = Join-Path $prefix 'bin/ttools.cmd'
           if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'ZIP install did not create the ttools command shim.' }
@@ -149,10 +162,13 @@ jobs:
           }
           Pop-Location
           $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
+          $remoteLog = Join-Path $env:RUNNER_TEMP 'TTools PowerShell журнал.log'
           $candidateBootstrap = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/bootstrap.py"
           $env:TTOOLS_BOOTSTRAP_URL = $candidateBootstrap
-          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings
+          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings -LogPath $remoteLog
           Remove-Item Env:TTOOLS_BOOTSTRAP_URL
+          if (-not (Test-Path -LiteralPath $remoteLog -PathType Leaf)) { throw 'PowerShell installer did not create the requested transcript.' }
+          if ((Get-Content -LiteralPath $remoteLog -Raw) -notmatch 'Detailed installer log enabled\.') { throw 'PowerShell installer transcript did not capture the session.' }
           $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
           if (-not (Test-Path -LiteralPath $remoteLauncher -PathType Leaf)) { throw 'PowerShell install did not create the ttools command shim.' }
           $remoteApps = & $remoteLauncher --list | Out-String

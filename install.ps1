@@ -2,6 +2,7 @@ param(
     [switch]$AllowPartial,
     [switch]$Preview,
     [string]$Prefix,
+    [string]$LogPath,
     [string]$Components,
     [switch]$LocalPackage,
     [switch]$DeferSystem,
@@ -409,4 +410,27 @@ function Invoke-TToolsInstall {
     }
 }
 
-if (-not $DefinitionsOnly) { Invoke-TToolsInstall }
+if (-not $DefinitionsOnly) {
+    $transcriptStarted = $false
+    if ($LogPath) {
+        try {
+            $fullLogPath = [IO.Path]::GetFullPath($LogPath)
+            $logDirectory = Split-Path -Parent $fullLogPath
+            if ($logDirectory -and -not (Test-Path -LiteralPath $logDirectory -PathType Container)) {
+                New-Item -ItemType Directory -Path $logDirectory -Force -ErrorAction Stop | Out-Null
+            }
+            Start-Transcript -Path $fullLogPath -Append -ErrorAction Stop | Out-Null
+            $transcriptStarted = $true
+            Write-Host 'Detailed installer log enabled.'
+        } catch {
+            throw 'Could not start the requested installer log. Check that its directory is writable.'
+        }
+    }
+    try {
+        Invoke-TToolsInstall
+    } finally {
+        if ($transcriptStarted) {
+            try { Stop-Transcript | Out-Null } catch { }
+        }
+    }
+}

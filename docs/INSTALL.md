@@ -77,6 +77,33 @@ python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcu
 Этот режим не делает VPN готовым: `complete=false`. Он нужен тестам и
 подготовке пользовательских файлов. Полная установка не использует этот флаг.
 
+## Windows: диагностика и журнал установщика
+
+Извлеките ZIP полностью. Безопасная диагностика запускается так:
+
+```powershell
+powershell.exe -NoProfile -File .\ttools\scripts\Diagnose-TTools.ps1
+```
+
+Она проверяет запуск CPython 3.14, видимость команд WinGet, App Installer и
+WinGet alias. Диагностика ничего не устанавливает и не меняет; домашние пути в
+выводе маскируются.
+
+Для установки из ZIP с подробным журналом:
+
+```powershell
+& .\ttools\Install-ttools.cmd -Preview -LogPath "$env:LOCALAPPDATA\ttools-install.log"
+```
+
+Для официального PowerShell-установщика команда выглядит так:
+
+```powershell
+& .\install.ps1 -Preview -LogPath "$env:LOCALAPPDATA\ttools-install.log"
+```
+
+Журнал дополняется при повторном запуске. Перед отправкой журнала проверьте
+строки с путями установки.
+
 ## Данные и обновления
 
 Префикс по умолчанию:
