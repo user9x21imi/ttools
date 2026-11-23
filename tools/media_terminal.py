@@ -136,10 +136,10 @@ def terminal_image(cells,title,accent,width=112,height=34,caption='OFFLINE DEMO 
     draw.text((40,canvas.height-34),caption,font=SMALL,fill='#627e90')
     return canvas
 
-def capture(argv,env,title,accent,actions=(),seconds=7,width=112,height=34,caption='OFFLINE DEMO · NO ACCOUNT DATA'):
+def capture(argv,env,title,accent,actions=(),seconds=7,width=112,height=34,caption='OFFLINE DEMO · NO ACCOUNT DATA',cwd=None,frame_interval=.2,ascii_only=False,require_braille=False):
     master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',height,width,0,0))
-    child=subprocess.Popen(list(map(str,argv)),stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,**env,TERM='xterm-256color'),start_new_session=True)
-    os.close(slave);vt=VT(width,height);started=time.monotonic();next_frame=1.;index=0;frames=[];raw=bytearray()
+    child=subprocess.Popen(list(map(str,argv)),stdin=slave,stdout=slave,stderr=slave,env=dict(os.environ,**env,TERM='xterm-256color'),start_new_session=True,cwd=cwd or ROOT)
+    os.close(slave);vt=VT(width,height);started=time.monotonic();next_frame=frame_interval;index=0;frames=[];raw=bytearray()
     try:
         while time.monotonic()-started<seconds and child.poll() is None:
             elapsed=time.monotonic()-started
@@ -149,16 +149,23 @@ def capture(argv,env,title,accent,actions=(),seconds=7,width=112,height=34,capti
                 except OSError:break
                 raw.extend(data);vt.feed(data)
             if elapsed>=next_frame:
-                if sum(ch!=' ' for ch,fg,bg,bold in vt.cells.values())>80:
+                if sum(ch!=' ' for ch,fg,bg,bold in vt.cells.values())>10:
                     frames.append(terminal_image(dict(vt.cells),title,accent,width,height,caption))
-                next_frame+=.20
+                next_frame+=frame_interval
         if child.poll() is None:
-            os.write(master,b'\x11')
-            try:child.wait(timeout=4)
-            except subprocess.TimeoutExpired:child.terminate();child.wait(timeout=4)
+            os.write(master,b'q')
+            try:child.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                child.terminate()
+                try:child.wait(timeout=2)
+                except subprocess.TimeoutExpired:child.kill();child.wait(timeout=2)
         if b'Traceback' in raw:raise RuntimeError(raw[-3000:].decode(errors='replace'))
+        if ascii_only and any(byte>=128 for byte in raw):raise RuntimeError('ASCII capture emitted a non-ASCII byte')
+        if require_braille and not any(0x2800<=ord(char)<=0x28ff for char in raw.decode('utf-8','replace')):
+            raise RuntimeError('Unicode capture did not emit a Braille glyph')
     finally:
-        if child.poll() is None:child.terminate();child.wait(timeout=5)
+        if child.poll() is None:
+            child.kill();child.wait(timeout=2)
         os.close(master)
     if not frames:raise RuntimeError('No terminal frames captured: '+raw[-1000:].decode(errors='replace'))
     return frames

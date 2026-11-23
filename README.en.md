@@ -2,7 +2,7 @@
 
 [Русский](README.md) · [Install](#install) · [Gallery](docs/SHOWCASE.md) · [Releases](https://github.com/user9x21imi/ttools/releases)
 
-Music, conversations, a VPN and a little motion. **ttools** brings four terminal apps into one keyboard-driven launcher, with a shared visual language of characters, quiet colour and open space.
+Music, conversations, a VPN and a little motion. **ttools** brings five terminal apps into one keyboard-driven launcher, with a shared visual language of characters, quiet colour and open space.
 
 ![Music and the globe in one workspace](docs/assets/workspace-01-collection.png)
 
@@ -15,11 +15,14 @@ Choose an app with **↑/↓**, press **Enter**, and return to the launcher when
 | App | What it does |
 | --- | --- |
 | **tspotify** | Search, library, playlists, playback and visualisation |
+| **SoundCloud** | Music, discovery, library and comments on the waveform |
 | **ttelegram** | Chats, images, files, stickers and voice notes |
 | **TVPN** | Connection controls, regions, a globe and traffic indicators |
 | **tthings** | 200 visual effects and 19 system tools: 219 built-in modes |
 
 ### tspotify / music you can see
+
+Startup opens a refreshed Fastfetch-style system screen while Spotify loads, then leaves it visible for a few seconds after the client is ready. The spectrum panel remains visible in compact 78×24 terminals.
 
 ![Sound lines and character waves](docs/assets/section-music.png)
 
@@ -32,6 +35,12 @@ A dotted cover, your library and playback controls in one view. Search for artis
 ![Large cover and spectrum](docs/assets/app-spotify-player.png)
 
 Spotify Premium is required for playback. Spectrum availability depends on the platform and audio setup; see the [app documentation](components/tspotify/source/README.md).
+
+### SoundCloud / music with comments
+
+The waveform covers the full track and marks comments at their timestamps. Hover over a marker to read it; during playback a comment appears when the playhead reaches it. Search, library, feed and player controls share one terminal view.
+
+**F3** opens the large player; **F4** or **B** opens the library with a mini-player. Live playback needs a SoundCloud login, FFmpeg and SDL2. The app includes an offline demo. This preview packages SoundCloud for Linux x86_64 only; live login and streams still need confirmation on the target machine. [Controls and setup](components/tsoundcloud/source/README.md).
 
 ### ttelegram / room for a conversation
 
@@ -92,7 +101,7 @@ ttools --low-power
 
 ## Install
 
-The current published suite is a preview. Linux includes all four apps. The Windows package with native Telegram is a review candidate, not a published suite release yet. [Installation details](docs/INSTALL.md) cover prerequisites and platform limits.
+The current published suite is a preview. The next preview adds SoundCloud on Linux and an update offer on macOS. Windows SoundCloud is not included. [Installation details](docs/INSTALL.md) cover prerequisites and platform limits.
 
 **Linux x86_64**
 
@@ -116,17 +125,17 @@ Open a new terminal and run `ttools`. Initial setup downloads shared dependencie
 
 ## Compatibility
 
-| Platform | Spotify | Telegram | TVPN | tthings |
-| --- | --- | --- | --- | --- |
-| Linux x86_64 | Included | Included | Included | Included |
-| Windows x64 | Preview | Native review candidate | Preview | Preview |
-| macOS ARM / Intel | Preview | — | Preview | Preview |
+| Platform | Spotify | SoundCloud | Telegram | TVPN | tthings |
+| --- | --- | --- | --- | --- | --- |
+| Linux x86_64 | Included | Preview | Included | Included | Included |
+| Windows x64 | Preview | — | Native review candidate | Preview | Preview |
+| macOS ARM / Intel | Preview | — | — | Preview | Preview |
 
 A platform archive is not proof that account login, audio hardware or VPN connectivity has been tested on that OS. [Validation](docs/VALIDATION.md) records the actual checks.
 
 ## Updates
 
-ttools checks for suite updates at startup and installs the apps together. Settings and saved sessions live outside the versioned application files. If the network is unavailable, the installed version stays usable. Close running apps before updating.
+ttools checks for suite updates at startup and installs the apps together. On macOS it offers the update first, so you can accept or skip it. Settings and saved sessions live outside the versioned application files. If the network is unavailable, the installed version stays usable. Close running apps before updating.
 
 ## Read more
 

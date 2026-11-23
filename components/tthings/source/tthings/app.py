@@ -10,6 +10,7 @@ from .effects import Frame, Scene, PALETTES, FG, DIM
 from .settings import read,save
 from .terminal import Terminal
 from .titles import effect_caption
+from .preview import GalleryPreview
 
 def invocation():
     if getattr(sys,'frozen',False):return [sys.executable]
@@ -80,7 +81,7 @@ def run():
     if not isinstance(favorites,list):favorites=[]
     query='';editing=False;selected=0;category='Все';mode='builtin';only_fav=False
     categories=['Все']+sorted({e.category for e in search()})
-    notice='';notice_until=0;preview=None;preview_id=None;preview_start=time.monotonic()
+    notice='';notice_until=0;gallery_preview=GalleryPreview()
     from .system_preview import SystemPreview
     systems_preview=SystemPreview()
     windows=[]
@@ -95,7 +96,7 @@ def run():
                         from .settings import config_path
                         notice='Окно не открылось: проверьте графический сеанс; '+str(config_path().with_name('window.log'))
                         notice_until=tick+8
-            term.set_title({'builtin':'Beautiful Things','systems':'Systems Things','external':'Оригиналы'}[mode])
+            term.set_title({'builtin':'Gallery Mode · Beautiful Things','systems':'Systems Things','external':'Оригиналы'}[mode])
             if mode!='systems' and (systems_preview.worker or systems_preview.fetch):systems_preview.close()
             w,h=term.size();f=Frame(w,h);p=PALETTES[palette]
             entries=search(query,category,mode)
@@ -104,7 +105,7 @@ def run():
             current=entries[selected] if entries else None
             f.text(2,1,'t t h i n g s',p[0])
             f.text(2,2,'Тихое место для вашего терминала',DIM)
-            f.text(2,4,'1 Beautiful Things   4 Systems Things   3 Оригиналы',p[1])
+            f.text(2,4,'1 Gallery Mode   4 Systems Things   3 Оригиналы',p[1])
             f.text(2,5,f'Tab: {category} · F избранное'+(' ✓' if only_fav else ''),DIM)
             f.text(2,6,('Поиск › ' if editing else '2 / поиск › ')+query+('▏' if editing else ''),p[0] if editing else FG)
             list_width=min(36,max(24,w//3)) if w>=85 else w-4
@@ -120,9 +121,8 @@ def run():
                 if w>=85 and h>=18:
                     x=list_width+5;pw=w-x-2;ph=max(1,min(42,h-15))
                     if current.kind=='effect':
-                        if preview_id!=current.id:
-                            preview=Scene(current.id);preview_id=current.id;preview_start=tick
-                        pf=preview.render(pw,ph,tick-preview_start,palette)
+                        gallery_preview.select(current.id,tick)
+                        pf=gallery_preview.render(pw,ph,tick,palette)
                         for y,row in enumerate(pf.cells):f.cells[8+y][x:x+pw]=row
                     elif current.kind=='tool':
                         pf=systems_preview.render(current.id,pw,ph,palette)
@@ -134,7 +134,7 @@ def run():
                         f.text(x,15,'Встроенные эффекты работают автономно',DIM)
                 f.text(2,h-5,current.description[:max(1,w-4)],p[2])
             else:f.text(2,8,'Ничего не найдено. Очистите поиск или смените фильтр.',DIM)
-            f.text(2,h-4,f'{len(entries)} пунктов  ·  '+{'builtin':'Beautiful Things','systems':'Systems Things','external':'Оригинальные проекты'}[mode]+'  ·  * добавить в избранное',DIM)
+            f.text(2,h-4,f'{len(entries)} пунктов  ·  '+{'builtin':'Gallery Mode','systems':'Systems Things','external':'Оригинальные проекты'}[mode]+'  ·  * добавить в избранное',DIM)
             f.text(2,h-3,'↑↓ выбор  Enter запуск  R случайно  G область  W окно',DIM)
             f.text(2,h-2,'Tab категория  P цвет  O исходники  Esc назад / выход',DIM)
             if notice and tick<notice_until:f.text(2,h-1,notice,p[4])

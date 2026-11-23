@@ -1,16 +1,36 @@
 """Exercise a real native curses frontend in an offline pseudo-terminal."""
 
 import os
-import re
+import importlib.util
 import subprocess
 import sys
 import threading
 import time
 from pathlib import Path
 
-binary = Path(sys.argv[1]).resolve()
-command = [str(binary), "--demo", "--no-splash"]
-height, width = (24, 80) if "--compact" in sys.argv else (48, 140)
+arguments = sys.argv[1:]
+source_mode = "--source" in arguments
+binary_arg = next((arg for arg in arguments if not arg.startswith("--")), None)
+if source_mode and binary_arg:
+    raise SystemExit("Pass either --source or a native binary path, not both")
+if source_mode:
+    source = Path(__file__).resolve().parents[1] / "src"
+    missing = [name for name in ("PIL", "numpy", "qrcode", "platformdirs", "httpx") if importlib.util.find_spec(name) is None]
+    if missing:
+        packages = {"PIL": "Pillow"}
+        names = ", ".join(packages.get(name, name) for name in missing)
+        raise SystemExit(f"Missing tspotify dependencies: {names}. Set up the project with `python -m pip install -e '.[dev]'`.")
+    os.environ["PYTHONPATH"] = str(source) + os.pathsep + os.environ.get("PYTHONPATH", "")
+    command = [
+        sys.executable,
+        "-c",
+        f"import sys; sys.path.insert(0, {str(source)!r}); from tspotify.cli import main; main(['--demo', '--no-splash', '--no-motion'])",
+    ]
+else:
+    if binary_arg is None:
+        raise SystemExit("Usage: smoke_terminal.py --source [options] | smoke_terminal.py BINARY [options]")
+    command = [str(Path(binary_arg).resolve()), "--demo", "--no-splash", "--no-motion"]
+height, width = (24, 80) if "--compact" in arguments else (48, 140)
 output = []
 seen = threading.Event()
 quit_key = "\x11" if "--ctrl-q" in sys.argv else "q"
@@ -19,22 +39,21 @@ quit_key = "\x11" if "--ctrl-q" in sys.argv else "q"
 def interact(send):
     if "--interact" not in sys.argv:
         return
-    # Emulate the protocol requested by the child's curses library. macOS
-    # system ncurses can request legacy X10 rather than SGR mouse reports.
-    # Cover coordinates stay below 95, so X10 bytes are also plain ASCII.
-    terminal_output = "".join(output)
-    sgr = os.name == "nt" or re.search(r"\x1b\[\?[0-9;]*1006[0-9;]*h", terminal_output)
-    if sgr:
-        send("\x1b[<0;6;10M\x1b[<0;6;10m")
-    else:
-        send("\x1b[M" + chr(32) + chr(38) + chr(42))
-        send("\x1b[M" + chr(35) + chr(38) + chr(42))
-    deadline = time.monotonic() + 8
-    while "NOW PLAYING" not in "".join(output) and time.monotonic() < deadline:
-        time.sleep(0.05)
-    if "NOW PLAYING" not in "".join(output):
-        raise RuntimeError("Mouse did not open the expanded player: " + "".join(output)[-2000:])
+    def wait_for(marker, start=0):
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if marker in "".join(output)[start:]:
+                return
+            time.sleep(0.025)
+        raise RuntimeError(f"F3 smoke did not observe {marker!r}: {''.join(output)[-2000:]}")
+
+    wait_for("F3 PLAYER")
+    cursor = len("".join(output))
+    send("\x1bOR")  # F3 enters Player Mode.
+    wait_for("F3 EXIT", cursor)
+    cursor = len("".join(output))
     send("\x1bOR")  # F3 returns to the library.
+    wait_for("F3 PLAYER", cursor)
 
 
 if os.name == "nt":
@@ -49,7 +68,7 @@ if os.name == "nt":
             except EOFError:
                 return
             output.append(text)
-            if "tspotify" in "".join(output):
+            if "DEMO / NO AUDIO" in "".join(output):
                 seen.set()
 
     threading.Thread(target=read, daemon=True).start()
@@ -87,7 +106,7 @@ else:
             output.append(data.decode(errors="replace"))
             if b"\x1b[6n" in data:
                 os.write(master, b"\x1b[1;1R")
-            if "tspotify" in "".join(output):
+            if "DEMO / NO AUDIO" in "".join(output):
                 seen.set()
 
     threading.Thread(target=read, daemon=True).start()
@@ -108,4 +127,7 @@ else:
         raise SystemExit("Native terminal returned an error: " + "".join(output)[-2000:])
 
 shortcut = "Ctrl+Q" if quit_key == "\x11" else "q"
-print(f"Native terminal rendered dotted UI and exited with {shortcut}; no account or audio used.")
+mode = "source demo" if source_mode else "Native terminal"
+print(f"{mode} rendered dotted UI and exited with {shortcut}; no account or audio used.")
+if "--interact" in arguments:
+    print("F3 entered Player Mode and returned to the library.")

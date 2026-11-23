@@ -32,6 +32,28 @@ REGION_KEYS = list(REGIONS)
 REGION_COUNTS = {}
 
 
+def advance_region_selection(choosing, key, counts):
+    """Apply one chooser key without starting or stopping the VPN backend.
+
+    Returns ``(next_choice, requested_region, message)`` so the chooser can be
+    tested with a synthetic gateway catalogue and never needs a live tunnel.
+    """
+    if choosing is None:
+        return None, None, None
+    if key in (curses.KEY_UP, ord('k')):
+        return (choosing-1) % len(REGION_KEYS), None, None
+    if key in (curses.KEY_DOWN, ord('j')):
+        return (choosing+1) % len(REGION_KEYS), None, None
+    if key in (10, 13, curses.KEY_ENTER):
+        region=REGION_KEYS[choosing]
+        if counts.get(region)==0:
+            return choosing, None, 'В актуальном каталоге Riseup нет шлюзов этого региона'
+        return None, region, None
+    if key in (27, ord('r'), ord('R')):
+        return None, None, None
+    return choosing, None, None
+
+
 def art_text(text):
     """Use ordinary ASCII art where Terminal.app cannot render Braille reliably."""
     replacements={'●':'.','↓':'RX','↑':'TX','—':'-','…':'...','·':':','›':'>'}
@@ -420,21 +442,13 @@ def run(script, selected='amsterdam'):
                 except curses.error:
                     pass
             if choosing is not None:
-                if key in (curses.KEY_UP, ord('k')):
-                    choosing = (choosing-1) % len(REGION_KEYS)
-                elif key in (curses.KEY_DOWN, ord('j')):
-                    choosing = (choosing+1) % len(REGION_KEYS)
-                elif key in (10, 13, curses.KEY_ENTER):
-                    if m.counts.get(REGION_KEYS[choosing]) == 0:
-                        m.detail = 'В актуальном каталоге Riseup нет шлюзов этого региона'
-                        continue
-                    next_region = REGION_KEYS[choosing]
-                    choosing = None
+                choosing,requested_region,message=advance_region_selection(choosing,key,m.counts)
+                if message:m.detail=message
+                if requested_region is not None:
+                    next_region=requested_region
                     if not ended:
                         m.detail = 'Восстановление сети перед сменой региона…'
                         request_stop()
-                elif key in (27, ord('r'), ord('R')):
-                    choosing = None
                 continue
             if not journal and m.state!='off':
                 if key==curses.KEY_LEFT:m.globe.pan(0,-12)

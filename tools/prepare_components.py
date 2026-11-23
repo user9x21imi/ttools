@@ -32,6 +32,16 @@ def prepare(handoff, vpn):
         copy_code(src/'source', dest/name/'source')
         for file in ('app.json', 'update.json', 'HANDOFF.md', 'install.py'):
             shutil.copy2(src/file, dest/name/file)
+    # SoundCloud ships a small verified wheel and launch wrapper rather than an
+    # install/update script; the suite owns its lifecycle and update channel.
+    src = handoff/'tsoundcloud'
+    if not (src/'app.json').is_file():
+        raise RuntimeError('Missing handoff: tsoundcloud')
+    target = dest/'tsoundcloud'
+    copy_code(src/'source', target/'source')
+    for file in ('app.json','HANDOFF.md','launch.py'):
+        shutil.copy2(src/file,target/file)
+    shutil.copytree(src/'runtime',target/'runtime')
     # TVPN code allowlist: mirrors the provided clean snapshot plus install/manage APIs.
     target = dest/'tvpn'/'source'
     for item in vpn.iterdir():
@@ -50,6 +60,7 @@ def prepare(handoff, vpn):
     copy_code(vpn/'assets/licenses',target/'assets/licenses')
     metadata = {
         'tspotify':json.loads((dest/'tspotify/app.json').read_text())['version'],
+        'tsoundcloud':json.loads((dest/'tsoundcloud/app.json').read_text())['version'],
         'ttelegram':(dest/'ttelegram/source/VERSION').read_text().strip(),
         'tthings':json.loads((dest/'tthings/app.json').read_text())['version'],
         'tvpn':(target/'VERSION').read_text().strip(),

@@ -31,7 +31,13 @@ A keyboard-driven Spotify client with **colored dotted artwork**, tiny playlist 
 
 ## Install
 
-Native release downloads are not published yet. Install from source using **Python 3.11 or newer** with `venv` and `pip` available. The commands below install into your user directory without root/admin access or Git.
+**[Download the latest release](https://github.com/user9x21imi/tspotify/releases/latest)** · Linux x86_64 · macOS Apple Silicon · macOS Intel · Windows x64
+
+Each native archive includes Python, dependencies and the streaming engine. Extract it and run `./tspotify/tspotify` in a terminal; on macOS you can also open `Start tspotify.command`. Spotify Desktop is not required. CI builds and smoke-tests each target; live playback and audio capture still need real hardware and are not claimed as tested on every OS.
+
+### Source installation
+
+Use **Python 3.11 or newer** with `venv` and `pip` available. The commands below install into your user directory without root/admin access or Git. Source installs use an upstream engine unless a patched build is supplied; the native local controls and Jam require tspotify's patched engine. The Linux archive above includes it.
 
 **Linux / macOS** — paste these three commands into your terminal:
 
@@ -49,7 +55,7 @@ py -3 -m venv "$env:LOCALAPPDATA\tspotify\venv"
 & "$env:LOCALAPPDATA\tspotify\venv\Scripts\tspotify.exe"
 ```
 
-To launch again, use the last command for your OS. Add `--demo` to preview the interface offline without an account or audio. Add `--muted` for a silent start. Integrated playback requires Spotify Premium; the verified streaming engine downloads on first use.
+To launch again, use the last command for your OS. The animated Fastfetch-style screen shows system details while the Spotify engine starts, then stays up for three seconds after readiness. Use `--no-splash` to skip it, `--no-motion` to disable interface transitions, or `--low-power` to reduce refresh rate and skip transitions. Add `--demo` to preview offline without an account or audio, or `--muted` for a silent start. Integrated playback requires Spotify Premium. Source installations download a verified upstream streaming engine on first use; native archives already include their engine.
 
 <details><summary>Development installation</summary>
 
@@ -116,6 +122,8 @@ Desktop Spotify being installed is not the same as it being an available device:
 | `?`, `F1` | Full key reference |
 | `Ctrl+Q`, `q`, `Ctrl+C` | Save the session, exit and stop the integrated engine |
 
+The editorial layout, F3 player, transition recordings and render-only measurements are documented in [docs/EDITORIAL_UI.md](docs/EDITORIAL_UI.md).
+
 ## Fonts, terminals and transparency
 
 Use a normal Unicode monospace font: **Cascadia Mono**, **Menlo**, **JetBrains Mono**, or **Fira Mono**. Dotted covers use standard Braille characters, not private-use Nerd Font icons. No font download or global font replacement is necessary.
@@ -126,7 +134,7 @@ If your terminal/font cannot display the dots:
 tspotify --ascii
 ```
 
-Recommended terminals: Windows Terminal with PowerShell, Terminal.app/iTerm2 on macOS, and Konsole/GNOME Terminal/foot on Linux. A minimum of 78 columns × 24 rows is required; a taller window gives the artwork and library more room. The application uses the terminal's background, so existing terminal transparency remains visible. Transparency itself is a terminal setting.
+Recommended terminals: Windows Terminal with PowerShell, Terminal.app/iTerm2 on macOS, and Konsole/GNOME Terminal/foot on Linux. A minimum of 78 columns × 24 rows is required. The spectrum remains visible at this compact size; taller windows give the artwork and library more room. The application uses the terminal's background, so existing terminal transparency remains visible. Transparency itself is a terminal setting.
 
 ## Real audio spectrum
 

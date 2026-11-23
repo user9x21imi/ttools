@@ -9,7 +9,7 @@ def tm(*args, check=True):
     return subprocess.run(['tmux','-L',SOCKET,*args], check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 def state():
     try: return json.loads(CFG.read_text())
-    except (OSError, ValueError): return {'layout':'full', 'theme':0}
+    except (OSError, ValueError): return {'layout':'sidebar', 'theme':0}
 def save(s):
     CFG.parent.mkdir(parents=True, exist_ok=True); CFG.write_text(json.dumps(s))
 def panes():

@@ -30,7 +30,7 @@ def test_engine_is_stopped_when_frontend_initialization_fails(monkeypatch):
         def __init__(self, **kwargs):
             calls.append(("engine", kwargs["muted"]))
 
-        def start(self):
+        def start(self, *, quiet=False):
             calls.append("start")
 
         def close(self):
@@ -46,7 +46,7 @@ def test_engine_is_stopped_when_frontend_initialization_fails(monkeypatch):
 
     monkeypatch.setattr(curses, "wrapper", failure)
     with pytest.raises(SystemExit) as error:
-        cli.main(["--muted", "--device", "integrated"])
+        cli.main(["--muted", "--device", "integrated", "--no-splash"])
     assert error.value.code == 1
     assert ("engine", True) in calls and calls[-2:] == ["engine-close", "api-close"]
 

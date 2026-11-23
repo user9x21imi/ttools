@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tsound"
+version = "0.1.0"
+description = "Terminal SoundCloud player with waveform comments"
+requires-python = ">=3.10"
+dependencies = ["windows-curses>=2.4; platform_system == 'Windows'"]
+
+[project.scripts]
+tsoundcloud = "tsound.__main__:main"
+tsound = "tsound.__main__:main"
+
+[tool.setuptools]
+packages = ["tsound"]

@@ -1,38 +1,23 @@
-# tspotify → ttools
+# tspotify 0.2.0 → ttools
 
-Локальный пакет 0.1.0, Linux x86_64 / SteamOS. Исходники соответствуют коммиту 2c1c996e674144ac7f5117a0198d547e1670a22e. Репозиторий: https://github.com/user9x21imi/tspotify.
+Source is synchronized with `user9x21imi/tspotify` commit `5c64c3323acf493093c874f971f60a07284c472e` for version 0.2.0. The standalone release workflow builds Linux x86_64, macOS Apple Silicon/Intel, and Windows x64 archives. T Tools installs this component from `source/` in its managed Python environment; no native runtime archive is embedded in this component bundle.
 
-## Установка и команды
+## Startup screen
 
-`${BUNDLE}` — абсолютный путь к этой папке; `${PREFIX}` — выбранный каталог установки; `${HOME}` — домашний каталог пользователя. Это параметры для подстановки агентом, shell сам не подразумевается. Точные массивы argv находятся в app.json и update.json.
+The Fastfetch-style system screen appears before the integrated engine starts. Engine startup runs in a worker while the screen animates, then the screen remains visible for three seconds after readiness. Startup errors are shown before the launcher returns to the terminal. `--no-splash` skips the screen and uses the synchronous startup path; QR engine authorization also keeps the terminal prompt visible.
 
-Установка одной командой из Python/launcher: выполнить `install_argv` из app.json. В shell после задания BUNDLE и PREFIX: `python3 "$BUNDLE/install.py" --prefix "$PREFIX" --manifest "$BUNDLE/update.json" --archive "$BUNDLE/runtime/tspotify-linux-x86_64.zip"`.
+The spectrum panel is included in the regular layout at 78×24, the common compact Terminal.app window size. At this size it uses one row of bars; taller windows provide more detail and library space.
 
-Запуск: `${PREFIX}/bin/tspotify`. Версия: тот же argv с `--version`. Проверка зависимостей без интерфейса: `verify-runtime`. Диагностика: `doctor`. Безопасный интерфейс: `--demo --no-splash`. Штатное завершение: `stop --timeout 15`. Состояние: `status`. Клавиша выхода: Ctrl+Q.
+## Platform behavior
 
-Установка не запускает интерфейс, OAuth, воспроизведение, движок или VPN, не меняет системный звук и не требует root. Она использует локальный ZIP и проверяет SHA-256, версию и зависимости до переключения. Python нужен только установщику. Официальное приложение Spotify не требуется. Громкость, транспорт и перемотка встроенного движка управляются локальным IPC без Spotify Web API и его секундного ограничителя. Пользовательская громкость сохраняется при нажатии; стартовый mute отделён от предпочтения. Движок spotify_player 0.25.2+tspotify.1 (librespot/rodio, локальное управление) включён в runtime/; при запуске этого пакета скачивать его не нужно. Авторизация не включена в поставку. Для реальной музыки необходимы Premium и сеть. Демо, диагностика и установка работают офлайн. Офлайн-воспроизведение Spotify не заявляется.
+- **Linux:** captures only the integrated Spotify PulseAudio/PipeWire stream with `parec --monitor-stream`.
+- **macOS / Windows:** playback works from the bundled or pinned engine. Spectrum capture requires a dedicated Spotify audio input and `TSPOTIFY_SPOTIFY_LOOPBACK` set to its exact name or ID. Mixed system output and physical microphones are never selected automatically.
+- **External Spotify Connect:** remote audio is not available locally, so no local spectrum is shown.
 
-## Обновление и откат
+Standalone CI builds and runs offline smoke checks for all four OS/architecture targets. It does not validate account login, real playback, or audio capture on physical hardware for every OS. macOS and Windows spectrum behavior remains unverified on this machine.
 
-Владельцем обновления является ttools. В управляемой установке внутренний updater tspotify отключён, включая ручной `update`. Следующую версию устанавливать тем же install_argv после получения нового update.json и ZIP. Не обновлять при ошибке штатного stop.
+## T Tools install and lifecycle
 
-Установщик берёт install.lock и run.lock без ожидания; работающий управляемый UI держит run.lock. Параллельная установка/обновление и обновление активного процесса отклоняются. Верификация идёт в отдельной версии; current переключается атомарно. Предыдущая версия сохраняется. Откат: `python3 "${BUNDLE}/install.py" --prefix "${PREFIX}" --rollback`. Пользовательские настройки, OAuth и кэши находятся вне PREFIX, сохраняются при обновлении и откате. Повторная установка проверена. Устаревшие версии за пределами current/previous удаляются.
+T Tools installs `source/` with its managed Python environment. Updates are owned by the T Tools suite and preserve Spotify tokens, preferences, cached artwork, and saved session data. The runtime paths are `${HOME}/.config/tspotify`, `${HOME}/.local/share/tspotify`, and `${HOME}/.cache/tspotify`; the legacy `${HOME}/.cache/spotify-player` cache is also preserved.
 
-HTTPS URL релизного манифеста и runtime пока отсутствует: соответствующие поля намеренно null. Никаких ссылок на несуществующие архивы. Общему агенту доступен рабочий локальный вариант; для общего сетевого установщика необходимо опубликовать проверенный ZIP и update.json, затем заменить null реальными HTTPS URL. Установщик уже умеет загружать HTTPS manifest/artifact и проверяет SHA-256. Исходники на GitHub не равнозначны опубликованному бинарному релизу.
-
-## Данные и завершение
-
-Стандартные каталоги перечислены в app.json; XDG_* и TSPOTIFY_* overrides поддерживаются приложением. Существующий legacy ~/.cache/spotify-player сохраняется. В source/ и runtime/ нет пользовательских токенов, конфигураций, сессий или журналов. Загрузчик движка использует закреплённые версии и SHA-256; комплектный движок имеет engine/SHA256SUMS.txt.
-
-`stop` посылает авторизованную команду собственному UI и ждёт завершения UI и его дочернего guardian/движка; при превышении timeout возвращает ошибку. Он не завершает посторонние процессы Spotify. Управляемая команда не закрывает другую установку. Демо не создаёт сетевой control endpoint, для него выход Ctrl+Q/SIGTERM; run.lock всё равно предотвращает обновление во время демо.
-
-## Проверено и ограничения
-
-249 автоматический тест, 1 пропущен. Собран и запущен реальный Linux native runtime; normal/compact PTY, интерактивные кнопки и Ctrl+Q проверены без аккаунта/звука. Установка в изолированный PREFIX с пробелами и кириллицей, повторная установка, откат, отклонение несоответствующей версии и активного run.lock проверены. Во время активного native --demo обновление отклонялось. Полная штатная остановка работающего исходного UI вместе с движком проверена отдельно. Результаты: results.json.
-
-В реальном KDE проверены владельцы всех аппаратных медиакодов и F7–F12, передача всех шести desktop-команд на немой приёмник и восстановление прежних назначений. Нажатия физической клавиатуры и переключение с реального телефона в этом прогоне не проверялись; синхронизация проверена сценариями с подменёнными состояниями, без записи команд Spotify.
-
-Этот ZIP собран локально на SteamOS с glibc 2.43, Python 3.14; более старый Linux не объявляется проверенным. Установщик требует как минимум glibc 2.39, но фактический native verify-runtime является обязательной проверкой совместимости. Для широкого релиза использовать CI-сборку Ubuntu 24.04 и повторить проверку пакета. macOS/Windows исходники и CI существуют, их runtime не входят в эту передачу и здесь не объявлены проверенными. Системные медиаклавиши автоматически настраиваются для KDE; другие desktop/OS требуют своих системных привязок.
-
-
-Проверка исправления запуска: коммит b9de12e7124cdfc1b77753a09ab828e4e0885f26. Встроенный движок использует AP-порт 443. Два реальных интегрированных запуска с тестовой громкостью 0 прошли за 6,62 и 2,56 секунды; команды play не отправлялись, сохранённые 70% не изменились. Обычный UI после исправления также запущен и его готовность подтверждена локальным IPC. Пакет runtime/ пересобран с этим исправлением.
+For an update, T Tools stops only its own running client and waits for the UI and integrated engine to exit before switching releases. A stop timeout rejects the update. No account tokens, OAuth callbacks, listening data, or cache files are included in the source bundle.

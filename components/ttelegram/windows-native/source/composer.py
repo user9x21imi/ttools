@@ -53,7 +53,11 @@ class ComposerStatus(StatusView):
             self.cursor=min(self.w-2,4+string_len_dwc(self.buffer[start:self.pos].replace('\n','↵')))
         if self.h>=3:
             self.buttons=[]; x=1;row=2;last_toolbar=self.h-3
-            controls=[('Настройки Ctrl+O','settings'),('Подсказки F1','help')] if is_list else [('Голос Ctrl+G','voice'),('Стикеры Ctrl+T','stickers'),('GIF','gif_gallery'),('Вставить Ctrl+V','paste'),('Отправить Enter','send'),('Чаты Ctrl+L','chats'),('Файл Ctrl+U','document'),('Ответ','reply'),('Пересл.','forward'),('Настройки','settings'),('Помощь F1','help')]
+            if is_list:controls=[('Настройки Ctrl+O','settings'),('Подсказки F1','help')]
+            elif self.active:
+                controls=[('Отправить Enter','send'),('Файл Ctrl+U','document'),('Голос Ctrl+G','voice')]
+                if self.attachments.get(self.draft_key):controls.append(('Убрать Ctrl+D','remove_attachment'))
+            else:controls=[('Писать i','compose'),('Ответ r','reply'),('Переслать f','forward')]
             for title,key in controls:
                 label='['+title+'] '
                 if x+len(label)>=self.w-1:row+=1;x=1
@@ -61,8 +65,7 @@ class ComposerStatus(StatusView):
                 self.win.addstr(row,x,label,accent);self.buttons.append((row,x,x+len(label)-1,key));x+=len(label)
         if self.h>=4:
             attached=self.attachments.get(self.draft_key,[]) if self.draft_key else []
-            label=(f'Вложено: {len(attached)} · '+', '.join(('Файл '+Path(item['path']).name if item.get('kind')=='document' else ('GIF' if item.get('kind')=='animation' else 'Фото')+' '+str(item.get('width','?'))+'×'+str(item.get('height','?'))) for item in attached)+' | Ctrl+D — убрать последнее') if attached else (self.notice or 'Ctrl+O — настройки · Ctrl+V — вставить · Enter — отправить · Esc — чаты')
-            if is_list:label=self.notice or 'Печатайте для поиска · Ctrl+O — настройки · F1 — подсказки · Ctrl+Q — сохранить и выйти'
+            label=(f'Вложено: {len(attached)} · '+', '.join(('Файл '+Path(item['path']).name if item.get('kind')=='document' else ('GIF' if item.get('kind')=='animation' else 'Фото')+' '+str(item.get('width','?'))+'×'+str(item.get('height','?'))) for item in attached)+' | Ctrl+D — убрать последнее') if attached else (self.notice or ('Печатайте для поиска · Ctrl+O — настройки · F1 — подсказки · Ctrl+Q — сохранить и выйти' if is_list else ('Ctrl+V вложить · Ctrl+T стикеры/GIF · Tab — выбрать сообщение' if self.active else 'i — писать · Tab — выбрать сообщение · Ctrl+L — чаты')))
             self.win.addstr(self.h-2,1,truncate_to_len(label,self.w-3))
         voice=getattr(getattr(self,'engine',None),'voice',None)
         if voice:

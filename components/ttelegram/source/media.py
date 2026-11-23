@@ -228,33 +228,14 @@ def install():
     def draw(self,current,msgs,padding,chat):
         if getattr(self,'gallery_active',False):return
         msgs=[(index,deepcopy(message)) for index,message in msgs]
-        self._mouse_rows=[];self._media_hitboxes=[]
-        begin_frame(self.win)
-        original_draw(self,current,msgs,padding,chat)
-        visible=getattr(self,'_draw_layout',[])
-        by_id={message['id']:message for _,message in msgs}
-        for elements,selected,line_num in visible:
-            message=by_id.get(getattr(elements,'message_id',None))
-            if message is None:continue
-            idx=elements.message_index
-            proxy=MsgProxy(message)
-            kind=proxy.content_type
-            path=media_path(proxy) if kind in ('photo','sticker','animation') else None
-            self._mouse_rows.append((line_num,idx))
-            if not path:continue
+        from render_layout import draw_messages
+        draw_messages(self,current,msgs,padding,chat)
+        for top,left,cols,rows,index,path in getattr(self,'_editorial_media',[]):
             try:
-                cols,rows=dimensions(path,min(80,max(8,self.w-6)),max(2,min(22,self.h//2)))
-                text=elements[3]
-                marker={'photo':'Фото','sticker':'Стикер','animation':'GIF'}[kind]+' / '
-                if marker not in text:continue
-                label_width=sum(views.string_len_dwc(e) for e in elements[:3])
-                before=text.rsplit(marker,1)[0].split('\n')
-                offset=sum((views.string_len_dwc(s)+(label_width if i==0 else 0))//self.w+1 for i,s in enumerate(before[:-1]))
-                top=line_num+offset+1
-                if top>=1 and top+rows<=self.h:
-                    self._media_hitboxes.append((top,1,rows,cols,idx))
-                    self._refresh();render(self.win,path,top,1,cols,rows)
-            except (OSError,ValueError,subprocess.SubprocessError):continue
+                self._refresh()
+                render(self.win,path,top,left,cols,rows)
+            except (OSError,ValueError,subprocess.SubprocessError):
+                continue
         self._refresh()
     views.MsgView._format_msg=format_msg;views.MsgView.draw=draw
     original_open=controllers.msg_handler['l']
