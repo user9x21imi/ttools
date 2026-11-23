@@ -52,7 +52,7 @@ def test_playlist_follows_pagination_and_caches_complete_result(api):
             200,
             json={
                 "items": [{"track": {"id": "a"}}, {"track": None}],
-                "next": "https://api.spotify.com/v1/playlists/p/tracks?offset=1",
+                "next": "https://api.spotify.com/v1/playlists/p/items?offset=1",
             },
         )
 
@@ -62,6 +62,103 @@ def test_playlist_follows_pagination_and_caches_complete_result(api):
     assert value["context_uri"] == "spotify:playlist:p"
     assert api.context("playlist", "p", "Private mix") == value
     assert len(calls) == 2
+    assert all("/playlists/p/items" in call for call in calls)
+
+
+def test_artist_profile_fetches_full_catalog_by_group_and_paginates(api):
+    calls = []
+
+    def handler(request):
+        url = str(request.url)
+        calls.append(url)
+        if url.endswith("/artists/a"):
+            return httpx.Response(200, json={"id": "a", "name": "Artist", "images": [], "genres": []})
+        if "include_groups=album" in url and "offset=10" not in url:
+            return httpx.Response(200, json={
+                "items": [{"id": "album-1", "name": "First", "album_type": "album"}],
+                "next": "https://api.spotify.com/v1/artists/a/albums?include_groups=album&limit=10&offset=10",
+            })
+        if "include_groups=album" in url:
+            return httpx.Response(200, json={"items": [{"id": "album-2", "name": "Second"}], "next": None})
+        group = next(group for group in ("single", "appears_on", "compilation") if f"include_groups={group}" in url)
+        return httpx.Response(200, json={"items": [{"id": group, "name": group}], "next": None})
+
+    mock(api, handler)
+    profile = api.artist_profile("a", "Artist")
+    assert profile["artist"]["name"] == "Artist"
+    assert [item["id"] for item in profile["releases"]["album"]] == ["album-1", "album-2"]
+    assert all(profile["releases"][group] for group in ("single", "appears_on", "compilation"))
+    assert not any("top-tracks" in call for call in calls)
+    assert len(calls) == 6
+    assert api.artist_profile("a", "Artist") == profile
+    assert len(calls) == 6
+
+
+def test_artist_profile_propagates_removed_or_denied_api_endpoint(api):
+    calls = []
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(404, json={"error": {"message": "not found"}})
+    mock(api, handler)
+    with pytest.raises(SpotifyError) as error:
+        api.artist_profile("missing", "Missing")
+    assert error.value.status == 404
+    assert len(calls) == 1
+
+
+def test_artist_profile_keeps_available_groups_when_one_group_is_denied(api):
+    def handler(request):
+        if request.url.path.endswith("/artists/a"):
+            return httpx.Response(200, json={"id": "a", "name": "Artist"})
+        group = request.url.params.get("include_groups")
+        if group == "album":
+            return httpx.Response(403, json={"error": {"message": "unavailable"}})
+        return httpx.Response(200, json={"items": [{"id": group, "name": group}], "next": None})
+
+    mock(api, handler)
+    profile = api.artist_profile("a", "Artist")
+    assert profile["unavailable_groups"] == {"album": 403}
+    assert not profile["releases"]["album"]
+    assert profile["releases"]["single"][0]["id"] == "single"
+
+
+def test_artist_profile_respects_retry_after_instead_of_returning_fake_catalog(api):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if request.url.path.endswith("/artists/a"):
+            return httpx.Response(200, json={"id": "a", "name": "Artist"})
+        return httpx.Response(429, headers={"Retry-After": "12"})
+
+    mock(api, handler)
+    with pytest.raises(RateLimited) as error:
+        api.artist_profile("a", "Artist")
+    assert error.value.seconds == 12
+    assert len(calls) == 2
+
+
+def test_artist_context_does_not_call_removed_top_tracks_endpoint(api):
+    mock(api, lambda request: pytest.fail("removed endpoint must not be requested"))
+    with pytest.raises(SpotifyError, match="популярных треков артиста удалён"):
+        api.context("artist", "a", "Artist")
+
+
+def test_search_uses_category_and_offset_pagination(api):
+    calls = []
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(200, json={"artists": {
+            "items": [{"id": "artist-2", "name": "Artist 2"}],
+            "next": None,
+            "offset": 10,
+            "total": 11,
+        }})
+    mock(api, handler)
+    result = api.search("Artist", "artist", 10)
+    assert result["artists"][0]["id"] == "artist-2"
+    assert result["_paging"]["artist"] == {"offset": 10, "total": 11, "next": None}
+    assert "type=artist" in calls[0] and "limit=10" in calls[0] and "offset=10" in calls[0]
 
 
 def test_rate_limit_blocks_further_requests_instead_of_hammering_spotify(api):
@@ -372,14 +469,10 @@ def test_mix_tabs_only_show_real_saved_spotify_mixes(api, section, expected):
     assert [item["id"] for _, item in api.library(section)[1]] == expected
 
 
-def test_new_releases_are_openable_albums(api):
-    mock(
-        api,
-        lambda request: httpx.Response(
-            200, json={"albums": {"items": [{"id": "new", "name": "New release"}]}}
-        ),
-    )
-    assert api.library("Новые релизы")[1] == [("album", {"id": "new", "name": "New release"})]
+def test_new_releases_are_reported_as_removed_without_fake_albums(api):
+    mock(api, lambda request: pytest.fail("removed browse endpoint must not be requested"))
+    with pytest.raises(SpotifyError, match="удалил каталог новых релизов"):
+        api.library("Новые релизы")
 
 
 def test_recommendations_are_seeded_by_the_users_actual_top_tracks(api):
@@ -399,7 +492,7 @@ def test_recommendations_are_seeded_by_the_users_actual_top_tracks(api):
 def test_restricted_discovery_is_not_substituted_with_fake_music(api):
     mock(api, lambda request: httpx.Response(403, json={"error": {"message": "unavailable"}}))
     with pytest.raises(SpotifyError, match="недоступен для этого входа"):
-        api.library("Новые релизы")
+        api.library("Рекомендации")
 
 
 def test_dead_engine_is_recovered_before_sending_playback_command(api, monkeypatch):
