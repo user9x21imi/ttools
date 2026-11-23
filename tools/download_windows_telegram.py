@@ -10,6 +10,7 @@ from ttools.distribution import digest, extract_zip
 ROOT=Path(__file__).resolve().parents[1]
 REVIEWED_OVERRIDES=(
     'source/windows_bootstrap.py',
+    'manage.py',
     'source/composer.py',
     'source/engine.py',
     'source/media.py',
@@ -62,8 +63,12 @@ def apply_integration_fixes(destination,inventory):
         raise RuntimeError('Windows Telegram files.json and SHA256SUMS.txt hashes differ')
     for name in REVIEWED_OVERRIDES:
         source=overrides/name
-        if name not in inventory or not source.is_file():
+        if not source.is_file():
             raise RuntimeError('Missing reviewed Windows Telegram override: '+name)
+        if name not in inventory:
+            checksum_order.append(name)
+            inventory[name]=None
+            checksums[name]=None
     for name in REVIEWED_OVERRIDES:
         source=overrides/name
         shutil.copy2(source,destination/name)

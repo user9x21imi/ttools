@@ -64,6 +64,25 @@ class WindowsTelegramPackagingTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'inventories differ'):
                     download_windows_telegram.apply_integration_fixes(runtime, inventory)
 
+    def test_adds_reviewed_artifacts_missing_from_the_author_inventory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, runtime, inventory = self.fixture(root)
+            name = 'tests/artifacts/chat-list.png'
+            inventory.pop(name)
+            (runtime / 'files.json').write_text(json.dumps(inventory, indent=2) + '\n', encoding='utf-8')
+            (runtime / 'SHA256SUMS.txt').write_text(
+                ''.join(f'{value}  {item}\n' for item, value in inventory.items()), encoding='utf-8')
+            with patch.object(download_windows_telegram, 'ROOT', root):
+                download_windows_telegram.apply_integration_fixes(runtime, inventory)
+
+            installed = json.loads((runtime / 'files.json').read_text(encoding='utf-8'))
+            checksums = dict(line.split('  ', 1)[::-1] for line in
+                             (runtime / 'SHA256SUMS.txt').read_text(encoding='utf-8').splitlines())
+            self.assertIn(name, installed)
+            self.assertEqual(installed[name], digest(runtime / name))
+            self.assertEqual(checksums[name], installed[name])
+
     def test_requires_each_reviewed_source_before_installing_any_override(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

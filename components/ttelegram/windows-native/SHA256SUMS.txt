@@ -52,7 +52,7 @@ b6eea21bbafbaf7a2177e492f1be6b5efc6f4e708b1980773de51cdaa52f8211  licenses/sound
 14949dab294d8379384238869abc035f4ef95bb1968b10f88554afa001ead28e  licenses/standard_mailcap-3.13.0-py3-none-any/standard_mailcap-3.13.0.dist-info/LICENSE
 3d68cd2cd18b65bef04b593e4c9afee153733d67b95a7e555585b5c381a8fcb0  licenses/tdjson-1.8.66-cp314-cp314-win_amd64/tdjson-1.8.66.dist-info/licenses/LICENSE
 4ecf67193d773798f2a667b6d5e64a64d64a08c8eb4eafc969f7e6a7d71ba5d8  licenses/telegram_text-0.2.0-py3-none-any/telegram_text-0.2.0.dist-info/LICENSE
-0ca2a7616df08a7b50c552f508cc4b1096c21402a9ef7c7348b439661f3e0f88  manage.py
+7f97e6a2b6391b30017c0ecc850bd323b36e2ca17cb7dd9983de99f968e4c9c4  manage.py
 191ba8fbadeed194b5984d275322e9dcd61da3f313fbbd1a11786f93659d18c4  python-runtime-provenance.json
 082ac34e122e0ab89b6c4f321dce377dfe643dd93c783bf2bac05c5d70285780  rebuild_transport.py
 de57236a13d117f8d302b22833d21d5b1052c40dc59b7dd9b4541af7bb0fe8cb  requirements.txt
