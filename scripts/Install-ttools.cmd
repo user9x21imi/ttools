@@ -5,6 +5,7 @@ set "TTOOLS_INSTALL_PREVIEW="
 set "TTOOLS_INSTALL_ALLOW_PARTIAL="
 set "TTOOLS_INSTALL_PREFIX="
 set "TTOOLS_INSTALL_COMPONENTS="
+set "TTOOLS_INSTALL_DEFER_SYSTEM="
 set "TTOOLS_LOCAL_PACKAGE_ROOT=%~dp0"
 
 :parse_args
@@ -13,12 +14,13 @@ if /i "%~1"=="-Preview" goto set_preview
 if /i "%~1"=="-AllowPartial" goto set_allow_partial
 if /i "%~1"=="-Prefix" goto set_prefix
 if /i "%~1"=="-Components" goto set_components
+if /i "%~1"=="-DeferSystem" goto set_defer_system
 echo Unsupported installer option.
 goto failed
 
 :run_installer
 rem Invoke the bundled text as a script block; no execution-policy change or py command is needed.
-powershell.exe -NoLogo -NoProfile -Command "$installer = Join-Path (Get-Location) 'install.ps1'; $script = [scriptblock]::Create([IO.File]::ReadAllText($installer)); $options = @{ LocalPackage = $true }; if ($env:TTOOLS_INSTALL_PREVIEW -eq '1') { $options.Preview = $true }; if ($env:TTOOLS_INSTALL_ALLOW_PARTIAL -eq '1') { $options.AllowPartial = $true }; if ($env:TTOOLS_INSTALL_PREFIX) { $options.Prefix = $env:TTOOLS_INSTALL_PREFIX }; if ($env:TTOOLS_INSTALL_COMPONENTS) { $options.Components = $env:TTOOLS_INSTALL_COMPONENTS }; & $script @options"
+powershell.exe -NoLogo -NoProfile -Command "$installer = Join-Path (Get-Location) 'install.ps1'; $script = [scriptblock]::Create([IO.File]::ReadAllText($installer)); $options = @{ LocalPackage = $true }; if ($env:TTOOLS_INSTALL_PREVIEW -eq '1') { $options.Preview = $true }; if ($env:TTOOLS_INSTALL_ALLOW_PARTIAL -eq '1') { $options.AllowPartial = $true }; if ($env:TTOOLS_INSTALL_DEFER_SYSTEM -eq '1') { $options.DeferSystem = $true }; if ($env:TTOOLS_INSTALL_PREFIX) { $options.Prefix = $env:TTOOLS_INSTALL_PREFIX }; if ($env:TTOOLS_INSTALL_COMPONENTS) { $options.Components = $env:TTOOLS_INSTALL_COMPONENTS }; & $script @options"
 if errorlevel 1 (
   echo Installation failed. See the installer output above.
   if /i not "%TTOOLS_INSTALLER_NO_PAUSE%"=="1" pause
@@ -54,6 +56,11 @@ goto parse_args
 shift
 if "%~1"=="" goto missing_value
 set "TTOOLS_INSTALL_COMPONENTS=%~1"
+shift
+goto parse_args
+
+:set_defer_system
+set "TTOOLS_INSTALL_DEFER_SYSTEM=1"
 shift
 goto parse_args
 

@@ -147,6 +147,9 @@ try {
     $script:Prefix = $null
     $script:Components = $null
     Assert-Equal @('--allow-partial') (Get-InstallerArguments) 'A default Windows install did not select the supported partial suite.'
+    $script:DeferSystem = $true
+    Assert-Equal @('--allow-partial','--defer-system') (Get-InstallerArguments) 'The deferred system setup option was not forwarded.'
+    $script:DeferSystem = $false
 
     $standard = Join-Path $script:FixtureRoot 'Programs\Python\Python314\python.exe'
     New-Item -ItemType Directory -Path (Split-Path -Parent $standard) -Force | Out-Null

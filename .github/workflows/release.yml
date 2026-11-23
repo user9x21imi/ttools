@@ -105,7 +105,7 @@ jobs:
           $packageRoot = Join-Path $package 'ttools'
           if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'Install-ttools.cmd') -PathType Leaf)) { throw 'Windows ZIP layout is missing ttools/Install-ttools.cmd.' }
           Push-Location $packageRoot
-          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -Components tthings'
+          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -DeferSystem'
           $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
           & $env:ComSpec /d /c $line
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -113,7 +113,12 @@ jobs:
           if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw 'ZIP install did not create state.json.' }
           $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
           if (-not (Test-Path -LiteralPath (Join-Path $prefix 'runner.py') -PathType Leaf)) { throw 'ZIP install did not create runner.py.' }
-          if (-not ($state.options.components -contains 'tthings')) { throw 'The active release does not include tthings.' }
+          $expectedApps = @('tspotify','ttelegram','tvpn','tthings')
+          $catalog = Get-Content -LiteralPath (Join-Path $state.release 'apps.local.json') -Raw | ConvertFrom-Json
+          $installedApps = @($catalog.apps | ForEach-Object { $_.id })
+          foreach ($app in $expectedApps) {
+            if ($installedApps -notcontains $app) { throw "The active Windows release does not include $app." }
+          }
           $bundle = Get-Content -LiteralPath (Join-Path $state.release 'bundle.json') -Raw | ConvertFrom-Json
           if ($state.version -ne $bundle.version) { throw 'The active release does not match its bundle manifest.' }
           $sentinelPath = Join-Path $prefix 'user-data/qa-sentinel.json'
@@ -127,14 +132,17 @@ jobs:
           if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'ZIP install did not create the ttools command shim.' }
           $apps = & $launcher --list | Out-String
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ($apps -notmatch '(?m)^tthings\s') { throw 'Installed launcher did not list tthings.' }
-          & $launcher --app tthings --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & $launcher --list
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($app in $expectedApps) {
+            if ($apps -notmatch ('(?m)^' + [regex]::Escape($app) + '\s')) { throw "Installed launcher did not list $app." }
+            & $launcher --app $app --help | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Launcher could not start and return from $app --help." }
+            & $launcher --list | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Launcher did not return after $app." }
+          }
           Pop-Location
           $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
-          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings
+          $candidateBootstrap = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/bootstrap.py"
+          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings -BootstrapUrl $candidateBootstrap
           $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
           if (-not (Test-Path -LiteralPath $remoteLauncher -PathType Leaf)) { throw 'PowerShell install did not create the ttools command shim.' }
           $remoteApps = & $remoteLauncher --list | Out-String

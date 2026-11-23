@@ -11,6 +11,7 @@ from ttools.suite import APP_IDS,plan
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--allow-partial',action='store_true')
+    parser.add_argument('--defer-system',action='store_true')
     parser.add_argument('--preview',action='store_true')
     parser.add_argument('--prefix')
     parser.add_argument('--components',default=','.join(APP_IDS))
@@ -25,6 +26,7 @@ def main():
     python=python314(prefix)
     argv=[str(python),str(root/'installer.py'),'--prefix',str(prefix),'--components',args.components]
     if args.allow_partial:argv.append('--allow-partial')
+    if args.defer_system:argv.append('--defer-system')
     subprocess.run(argv,check=True)
     if args.preview or '-' in metadata['version']:(prefix/'channel').write_text('preview',encoding='utf-8')
     print('Installed. Open a new terminal and run: ttools')

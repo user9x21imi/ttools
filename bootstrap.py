@@ -126,7 +126,7 @@ def main():
         for stream in (sys.stdout,sys.stderr):
             if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     p=argparse.ArgumentParser(description='One-command ttools suite bootstrap')
-    p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true')
+    p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true');p.add_argument('--defer-system',action='store_true')
     p.add_argument('--components',default='tspotify,tsoundcloud,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')
     args=p.parse_args()
     target=target_platform()
@@ -168,6 +168,7 @@ def main():
         py=python314(prefix)
         argv=[str(py),str(bundle/'installer.py'),'--prefix',str(prefix),'--components',args.components]
         if args.allow_partial:argv.append('--allow-partial')
+        if args.defer_system:argv.append('--defer-system')
         subprocess.run(argv,check=True)
         if args.preview:
             (prefix/'channel').write_text('preview',encoding='utf-8')
