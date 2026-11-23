@@ -70,6 +70,8 @@ def build(output,platforms=PLATFORMS,handoff=None,source_commit=None):
                 copy_tree(ROOT/directory,root/directory)
             for name in ('installer.py','bootstrap.py','install-local.py','README.md','README.en.md','LICENSE','THIRD_PARTY.md','icon.svg','logo.svg'):
                 shutil.copy2(ROOT/name,root/name)
+            if target_platform=='windows-x86_64':
+                shutil.copy2(ROOT/'install.ps1',root/'install.ps1')
             copy_tree(ROOT/'docs',root/'docs')
             launcher='Install-ttools.sh' if target_platform.startswith('linux') else 'Install-ttools.command' if target_platform.startswith('macos') else 'Install-ttools.cmd'
             shutil.copy2(ROOT/'scripts'/launcher,root/launcher)

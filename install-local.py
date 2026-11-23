@@ -11,18 +11,22 @@ from ttools.suite import APP_IDS,plan
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--allow-partial',action='store_true')
+    parser.add_argument('--preview',action='store_true')
+    parser.add_argument('--prefix')
+    parser.add_argument('--components',default=','.join(APP_IDS))
     args=parser.parse_args()
     root=Path(__file__).resolve().parent
     metadata=verify_bundle(root)
     if metadata['platform']!=platform_id():raise RuntimeError('Download the ZIP for this OS/architecture')
-    proposal=plan(root,platform_id(),APP_IDS,args.allow_partial)
-    prefix=prefix_path()
+    selected=args.components.split(',')
+    proposal=plan(root,platform_id(),selected,args.allow_partial)
+    prefix=prefix_path(args.prefix)
     prepare_linux(proposal['install'])
     python=python314(prefix)
-    argv=[str(python),str(root/'installer.py'),'--prefix',str(prefix)]
+    argv=[str(python),str(root/'installer.py'),'--prefix',str(prefix),'--components',args.components]
     if args.allow_partial:argv.append('--allow-partial')
     subprocess.run(argv,check=True)
-    if '-' in metadata['version']:(prefix/'channel').write_text('preview',encoding='utf-8')
+    if args.preview or '-' in metadata['version']:(prefix/'channel').write_text('preview',encoding='utf-8')
     print('Installed. Open a new terminal and run: ttools')
     if proposal['unsupported']:print('Not included on this OS: '+', '.join(proposal['unsupported']))
     return 0

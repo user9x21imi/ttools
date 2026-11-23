@@ -55,6 +55,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:RUNNER_TEMP/Telegram проверка с пробелами/bootstrap/python.exe" -c "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')" "$env:RUNNER_TEMP/Telegram проверка с пробелами/manage.py" doctor --prefix "$env:RUNNER_TEMP/Telegram проверка с пробелами"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows installer logic with Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/windows/test_install_ps1.ps1
+      - name: Windows installer logic with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/windows/test_install_ps1.ps1
       - name: Preview platform installation plan
         run: python installer.py --plan --allow-partial
   package:
@@ -75,12 +83,54 @@ jobs:
         with:
           name: ttools-release
           path: dist/*
+  windows-installer-smoke:
+    needs: package
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ttools-release
+          path: ${{ runner.temp }}/ttools-release
+      - name: Install from release ZIP and launch ttools plus an app
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'ttools-release/ttools-windows-x86_64.zip'
+          $package = Join-Path $env:RUNNER_TEMP 'TTools пакет с пробелами'
+          $prefix = Join-Path $env:RUNNER_TEMP 'TTools установка с пробелами'
+          Expand-Archive -LiteralPath $archive -DestinationPath $package
+          Push-Location $package
+          $line = 'Install-ttools.cmd -Preview -AllowPartial -Prefix "' + $prefix + '" -Components tthings'
+          $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
+          & $env:ComSpec /d /c $line
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $env:ComSpec /d /c $line
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:TTOOLS_AUTOUPDATE = '0'
+          $launcher = Join-Path $prefix 'bin/ttools.cmd'
+          & $launcher --list
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $launcher --app tthings --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
+          $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
+          $remoteInstaller = [scriptblock]::Create([IO.File]::ReadAllText((Join-Path $env:GITHUB_WORKSPACE 'install.ps1')))
+          & $remoteInstaller -Preview -AllowPartial -Prefix $remotePrefix -Components tthings
+          $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
+          & $remoteLauncher --list
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $remoteLauncher --app tthings --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'Release ZIP and remote installs, repeat install, ttools launcher, and tthings launch all passed.'
   publish:
     # A versioned change merged to main becomes a public preview Release after
     # every check and platform package succeeds. Maintainers can also publish a
     # selected ref manually.
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish)
-    needs: package
+    needs: [package, windows-installer-smoke]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
