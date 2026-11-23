@@ -586,9 +586,10 @@ def animate_messages(controller, now=None):
     engine = getattr(controller, 'engine', None)
     accent = get_color(cyan, -1) | curses.A_DIM
     transition = getattr(engine, 'transition_started', 0) if engine else 0
+    glyph = CHAT_TRANSITION_GLYPHS[-1]
     if transition and now - transition < CHAT_TRANSITION_SECONDS:
         glyph = CHAT_TRANSITION_GLYPHS[chat_transition_state(now - transition)]
-        _put(view.win, 0, max(1, view.w - 3), glyph, accent)
+    _put(view.win, 0, max(1, view.w - 3), glyph, accent)
     for row, column, started in getattr(view, '_incoming_marks', []):
         age = now - started
         if age < .18:

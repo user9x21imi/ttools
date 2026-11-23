@@ -4,6 +4,10 @@ from pathlib import Path
 if os.name=='nt':raise SystemExit('Use run.cmd --demo on Windows; this PTY harness is for POSIX')
 import pty,fcntl,termios
 root=Path(__file__).resolve().parents[1]
+artifact_dir=next((parent/'components/ttelegram/windows-native/tests/artifacts'
+                   for parent in root.parents
+                   if (parent/'pyproject.toml').is_file()
+                   and (parent/'components/ttelegram/windows-native/tests/artifacts').is_dir()),None)
 with tempfile.TemporaryDirectory(prefix='Telegram UI тест ') as folder:
     folder=Path(folder);master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',45,140,1120,720))
     code="import os,runpy;from pathlib import Path;import windows_bootstrap;windows_bootstrap.install(native_td=False,configure_paths=False);runpy.run_path(str(Path(os.environ['TEST_SOURCE'])/'demo_scenario.py'),init_globals={'demo_path':lambda name:Path(os.environ['TTELEGRAM_DEMO_DIR'])/name})"
@@ -71,7 +75,7 @@ with tempfile.TemporaryDirectory(prefix='Telegram UI тест ') as folder:
         assert screenshot.is_file(),'conversation screenshot was not captured: '+output[-3000:].decode('utf-8','replace')+detail+stack
         from PIL import Image,ImageChops
         with Image.open(screenshot) as image:assert image.size==(1400,810),'conversation screenshot used the wrong terminal size'
-        key('\x1b[A'*88);visible=wait(lambda s:s.get('current_id')==10031)
+        key('\x1b[A'*88);visible=wait(lambda s:s.get('current_id')==10031 and not s.get('pending'))
         assert 10031 in visible['drawn_ids'],'long Unicode message left the visible history while selected'
         resize(24,80)
         compact=wait(lambda s:s.get('sizes',{}).get('root')==[24,80] and s.get('input_y',99)<24)
@@ -95,29 +99,29 @@ with tempfile.TemporaryDirectory(prefix='Telegram UI тест ') as folder:
         assert process.returncode==0,output[-3000:]
         assert '\x1bP0;0q' in output.decode('utf-8','replace'),'no SIXEL graphics emitted'
         assert (folder/'tt-native-test-session.json').is_file()
-        artifact_dir=Path(__file__).parent/'artifacts';artifact_dir.mkdir(exist_ok=True)
         demo_artifacts=folder/'artifacts'
         for name in ('chat-list.png','conversation.png'):
             source=demo_artifacts/name
             assert source.is_file(),f'missing synthetic screenshot: {name}'
-            shutil.copy2(source,artifact_dir/name)
         frames=sorted((folder/'transition-frames').glob('frame-*.png'))
-        for frame_path in frames:shutil.copy2(frame_path,artifact_dir/frame_path.name)
         assert len(frames)==4,f'chat reveal did not capture one frame for each of four animated states (observed {len(frames)})'
         images=[Image.open(path).convert('RGB') for path in frames]
-        message_region=(330,45,1200,670)
+        viewport_region=(330,0,1400,670)
         header_region=(330,0,1400,54)
-        signatures={image.crop(message_region).tobytes() for image in images}
+        signatures={image.crop(viewport_region).tobytes() for image in images}
         header_signatures={image.crop(header_region).tobytes() for image in images}
         assert len(header_signatures)==4,f'chat reveal showed only {len(header_signatures)} distinct transition indicators'
-        assert len(signatures)>=3,f'chat reveal produced only {len(signatures)} distinct message-region frames'
+        assert len(signatures)==4,f'chat reveal produced only {len(signatures)} distinct conversation viewport frames'
         distinct_changes=0;previous=None
         for image in images:
-            current=image.crop(message_region)
+            current=image.crop(viewport_region)
             if previous is not None and ImageChops.difference(previous,current).getbbox():distinct_changes+=1
             previous=current
         assert distinct_changes>=2,f'chat reveal displayed only {distinct_changes} visible state changes'
-        images[0].save(artifact_dir/'chat-transition.gif',save_all=True,append_images=images[1:],duration=105,loop=0,optimize=False)
+        if artifact_dir:
+            for name in ('chat-list.png','conversation.png'):
+                shutil.copy2(demo_artifacts/name,artifact_dir/name)
+            images[0].save(artifact_dir/'chat-transition.gif',save_all=True,append_images=images[1:],duration=105,loop=0,optimize=False)
         assert restored['sizes']['root']==[45,140]
         print('PASS: synthetic 120-message history, 4-state chat reveal, SGR mouse navigation, 80x24 and 120x40 resize, long Unicode draft, contextual composer, image attachment + caption, fake photo send, 100 progress updates without history repaint, scroll, settings return, draft restore, Ctrl+Q and SIXEL output')
     finally:

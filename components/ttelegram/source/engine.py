@@ -119,7 +119,10 @@ class Engine:
             else:
                 self.transition_started=0;transition_finished=True
         if (transition_frame or transition_finished) and self.c.view_mode=='messages':
-            self.c.render_msgs()
+            # Keep the chat reveal within 180 ms: repaint only its tiny header
+            # marker instead of redrawing the full history for each phase.
+            from render_layout import animate_messages
+            animate_messages(self.c,now)
         elif message_active and self.c.view_mode=='messages':
             from render_layout import animate_messages
             animate_messages(self.c,now)

@@ -1,6 +1,6 @@
 """Shared four-state timing and glyphs for chat-open transitions."""
 
-CHAT_TRANSITION_SECONDS = .42
+CHAT_TRANSITION_SECONDS = .18
 CHAT_TRANSITION_GLYPHS = ('·', '◦', '○', '●')
 CHAT_TRANSITION_STATE_COUNT = len(CHAT_TRANSITION_GLYPHS)
 

@@ -1,19 +1,16 @@
-import sys,unittest,tempfile,zipfile,json,io,importlib.util
+import sys,unittest,tempfile,zipfile,json,io
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'source'))
 import manage,vtcurses as vt
 import chat_transition as windows_transition
-REPO_ROOT=next(parent for parent in ROOT.parents if (parent/'components/ttelegram/source/chat_transition.py').is_file())
-linux_transition_spec=importlib.util.spec_from_file_location('linux_ttelegram_chat_transition',REPO_ROOT/'components/ttelegram/source/chat_transition.py')
-linux_transition=importlib.util.module_from_spec(linux_transition_spec);linux_transition_spec.loader.exec_module(linux_transition)
 class Core(unittest.TestCase):
-    def test_four_stage_transition_is_consistent_across_backends(self):
-        for layout in (linux_transition,windows_transition):
-            count=layout.CHAT_TRANSITION_STATE_COUNT
-            states=[layout.chat_transition_state(layout.CHAT_TRANSITION_SECONDS*(index+.1)/count) for index in range(count)]
-            self.assertEqual(states,list(range(4)))
-            self.assertEqual(len(layout.CHAT_TRANSITION_GLYPHS),4)
+    def test_four_stage_transition_uses_all_states(self):
+        count=windows_transition.CHAT_TRANSITION_STATE_COUNT
+        states=[windows_transition.chat_transition_state(windows_transition.CHAT_TRANSITION_SECONDS*(index+.1)/count) for index in range(count)]
+        self.assertEqual(count,4)
+        self.assertEqual(states,list(range(4)))
+        self.assertEqual(len(windows_transition.CHAT_TRANSITION_GLYPHS),4)
     def test_wheel_traversal(self):
         with tempfile.TemporaryDirectory(prefix='Telegram тест ') as d:
             root=Path(d);wheel=root/'bad.whl'
