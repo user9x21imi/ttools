@@ -3,6 +3,8 @@ from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT));sys.path.insert(0,str(ROOT/'source'))
 import manage,vtcurses as vt
+sys.modules['curses']=vt
+sys.modules['_curses']=vt
 import render_layout as windows_layout
 REPO_ROOT=next(parent for parent in ROOT.parents if (parent/'components/ttelegram/source/render_layout.py').is_file())
 linux_layout_spec=importlib.util.spec_from_file_location('linux_ttelegram_render_layout',REPO_ROOT/'components/ttelegram/source/render_layout.py')
