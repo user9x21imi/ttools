@@ -90,5 +90,32 @@ class OfflinePanelTests(unittest.TestCase):
         camera.scale(1.12)
         self.assertGreater(camera.zoom,1.)
 
+    def test_reduced_motion_snaps_focus_and_disables_spin(self):
+        camera=panel.Camera(reduced_motion=True)
+        target=panel.REGIONS['paris']
+        camera.select('paris',target['lat'],target['lon'])
+        self.assertAlmostEqual(camera.latitude,target['lat'])
+        self.assertAlmostEqual(camera.longitude,target['lon'])
+        self.assertIsNone(camera.target)
+        camera.toggle()
+        self.assertFalse(camera.spinning)
+
+    def test_camera_uses_short_turn_across_date_line_and_redirects(self):
+        camera=panel.Camera()
+        camera.latitude=0.
+        camera.longitude=179.
+        camera.focus(0.,-179.)
+        camera.tick(camera.last+.1)
+        self.assertGreater(abs(camera.longitude),170.)
+        camera.select('paris',panel.REGIONS['paris']['lat'],panel.REGIONS['paris']['lon'])
+        camera.select('seattle',panel.REGIONS['seattle']['lat'],panel.REGIONS['seattle']['lon'])
+        self.assertEqual(camera.region,'seattle')
+        self.assertEqual(camera.target,(panel.REGIONS['seattle']['lat'],panel.REGIONS['seattle']['lon']))
+
+    def test_graph_uses_oldest_and_newest_buckets(self):
+        bars,_=panel.graph([(0.0,1.0,0.0),(59.0,0.0,2.0)],2,60)
+        self.assertEqual(bars[0],'▁')
+        self.assertEqual(bars[-1],'█')
+
 
 if __name__=='__main__':unittest.main()

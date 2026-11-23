@@ -69,8 +69,9 @@ def safe(text):
 
 
 class Model:
-    def __init__(self, selected='amsterdam',camera=None):
+    def __init__(self, selected='amsterdam',camera=None,demo=False):
         self.globe=camera if camera is not None else Camera()
+        self.demo=bool(demo)
         self.art = os.environ.get('RISEUP_ART_STYLE','ascii' if sys.platform=='darwin' else 'unicode')
         self.counts = dict(REGION_COUNTS)
         self.geo_city = '—'
@@ -88,6 +89,7 @@ class Model:
         self.rx = self.tx = self.down = self.up = 0
         self.history = collections.deque(maxlen=60)
         self.cleanup = False
+        self.selection_changed = 0.0
 
     def line(self, line):
         if line.startswith('@RISEUP\t'):
@@ -131,6 +133,11 @@ class Model:
                     self.detail = f'HTTPS через {self.interface}: регион {b} подтверждён'
                     self.last = None
                     self.history.clear()
+            elif kind == 'traffic' and self.demo:
+                try:
+                    self._record_sample(time.monotonic(),int(a),int(b))
+                except ValueError:
+                    return
             elif kind == 'cleanup':
                 self.cleanup = a == 'ok'
             return
@@ -160,6 +167,9 @@ class Model:
             self.last = None
             self.down = self.up = 0
             return
+        self._record_sample(now,rx,tx)
+
+    def _record_sample(self,now,rx,tx):
         if self.last is None or rx < self.last[1] or tx < self.last[2]:
             self.base = (rx, tx)
             self.history.clear()
@@ -187,7 +197,7 @@ def graph(history, index, width):
         for sample in history:
             age = end - sample[0]
             if 0 <= age < 60:
-                bucket = min(count - 1, int((60 - age) / 60 * count))
+                bucket = min(count - 1, max(0, int((60 - age) / 60 * count) - 1))
                 buckets[bucket].append(sample[index])
     values = [max(bucket) if bucket else None for bucket in buckets]
     peak = max((v for v in values if v is not None), default=0)
@@ -207,84 +217,138 @@ def draw(screen, m, journal, ended, choosing=None, update=None):
                                curses.color_pair(color) | (curses.A_BOLD if bold else 0) | (curses.A_DIM if dim else 0))
             except curses.error:
                 pass
-    color = 2 if m.state == 'connected' else 3 if m.state == 'error' else 4
-    put(1,2,'●',color,True)
-    put(1,4,'tvpn',7,True)
-    put(1,13,'YOUR TUNNEL, LESS NOISE',5,dim=True)
-    put(3, 2, '● ' + LABELS.get(m.state, m.state), color, True)
-    put(4, 2, m.detail)
+    if height < 20 or width < 55:
+        put(0,2,'TVPN',7,True)
+        put(1,2,'Окно слишком мало · нужно не менее 55×20',4,True)
+        put(2,2,'Увеличьте окно терминала; системные настройки не меняются.',5)
+        put(height-2,2,'Ctrl+S · стоп/старт    Ctrl+Q · выход',5)
+        screen.refresh()
+        return
+
+    preview = REGION_KEYS[choosing] if choosing is not None else m.selected
+    target = REGIONS[preview]
+    active_color = 7 if m.demo else 2 if m.state == 'connected' else 3 if m.state == 'error' else 4
+    status = LABELS.get(m.state, m.state)
+    if m.demo:
+        status = 'DEMO · SIMULATED ROUTE' if m.state == 'connected' else 'DEMO · '+status
+    put(0,2,'TVPN',7,True)
+    put(0,9,'PRIVATE ROUTE / RISEUP',5,dim=True)
+    if m.demo:
+        put(0,max(2,width-23),'SYNTHETIC SESSION',7,True)
+    put(1,2,'● '+status,active_color,True)
+    put(1,max(34,width-30),'· '+target['city']+' / '+target['country'],5)
+    detail=('Synthetic session · no tunnel or external verification ran'
+            if m.demo and m.state=='connected' else m.detail)
+    put(2,2,detail,5)
+    put(3,2,'-'*(width-4),6,dim=True)
+
     if journal:
         m.globe.box=None
-        put(6, 2, 'ПОСЛЕДНИЕ СТРОКИ ЖУРНАЛА', 1, True)
-        for y, line in enumerate(list(m.logs)[-max(1, height - 11):], 8):
-            put(y, 2, line)
+        put(4,2,'EVENT LOG / ПОСЛЕДНИЕ СОБЫТИЯ',7,True)
+        for y,line in enumerate(list(m.logs)[-max(1,height-10):],6):
+            put(y,2,line,5)
     else:
-        # Let STOPED occupy the full map area, including on a wide Deck window.
-        wide = width >= 120 and m.state != 'off'
-        map_width = max(12, width - 46 if wide else width - 4)
-        map_height = max(6, min(24, height - (18 if wide else 25)))
-        preview = REGION_KEYS[choosing] if choosing is not None else m.selected
-        target = REGIONS[preview]
-        map_color = 2 if m.state == 'connected' and preview == m.selected else 4
-        if m.state == 'off' and choosing is None:
+        wide = width >= 108 and height >= 30
+        map_x,map_y=2,(5 if wide else 4)
+        map_width=(min(width-64,int(width*.62)) if wide else width-4)
+        map_width=max(12,map_width)
+        map_height=(min(height-19,map_width//2) if wide else min(11,height-14))
+        map_height=max(5,map_height)
+        panel_x=map_x+map_width+4 if wide else map_x
+        map_color=4 if m.demo else 2 if m.state=='connected' and preview==m.selected else 4
+        put(4,map_x,'NATURAL EARTH / '+target['country'],6,True)
+        if m.state=='off' and choosing is None:
             m.globe.box=None
-            banner = stoped_render(map_width, map_height)
-            top = 6 + max(0, (map_height-len(banner))//2)
-            for offset, line in enumerate(banner):
-                put(top+offset, 2+max(0, (map_width-len(line))//2), line, 3, True)
-            put(6+map_height, 2, 'Туннель остановлен · Ctrl+S — подключить', 5)
+            banner=stoped_render(map_width,map_height)
+            top=map_y+max(0,(map_height-len(banner))//2)
+            for offset,line in enumerate(banner):
+                put(top+offset,map_x+max(0,(map_width-len(line))//2),line,3,True)
         else:
             m.globe.select(preview,target['lat'],target['lon'])
             m.globe.tick()
-            m.globe.box=(2,6,map_width,map_height)
+            m.globe.box=(map_x,map_y,map_width,map_height)
             frame=globe_render(map_width,map_height,m.globe.latitude,m.globe.longitude,
                                target['country'],m.globe.zoom,(target['lat'],target['lon']))
-            for row_number,row in enumerate(frame,6):
+            for row_number,row in enumerate(frame,map_y):
                 start,previous,segment=0,None,''
                 for column,cell in enumerate(row):
                     style=(map_color,True) if cell.role>=3 else (1,False) if cell.role==2 else (6,False)
                     if previous is not None and style!=previous:
-                        put(row_number,2+start,segment,previous[0],previous[1])
+                        put(row_number,map_x+start,segment,previous[0],previous[1])
                         start,segment=column,''
                     segment+=cell.char
                     previous=style
-                if previous is not None:put(row_number,2+start,segment,previous[0],previous[1])
-            put(6+map_height, 2, '@ ' + target['city'] + ' / ' + target['country'] +
-                (' · выход подтверждён' if m.state == 'connected' and preview == m.selected else ' · выбрано'), map_color)
-            put(7+map_height,2,'Arrows: rotate  +/-: zoom  F: focus  Space: spin',5,dim=True)
-        x, y = (map_width+5, 7) if wide else (2, 6+map_height+2)
-        duration = int(time.monotonic() - m.since) if m.since else 0
-        timer = f'{duration//3600:02}:{duration//60%60:02}:{duration%60:02}' if m.since else '—'
-        rows = [('Локация', m.city), ('Регион выхода', m.region), ('Внешний IP', m.ip),
-                ('Шлюз', m.gateway), ('Сессия', timer), ('Интерфейс', m.interface),
-                ('GeoIP-город', m.geo_city + (' (ipwho.is)' if m.geo_city != '—' else ''))]
-        spacing = 2 if wide and height >= 36 else 1
-        for i, (label, value) in enumerate(rows):
-            put(y+i*spacing, x, f'{label:<15} {value}', 0, i == 2)
-        y = max(7 + map_height, y + len(rows)*spacing) + 1
-        for index, name, rate, total in [(1, '↓', m.down, m.rx), (2, '↑', m.up, m.tx)]:
-            bars, peak = graph(m.history, index, max(1, width-28))
-            put(y, 2, f'{name} {rate:7.2f} МиБ/с    Всего {volume(total)}', index, True)
-            put(y+1, 2, bars, index)
-            put(y+2, 2, f'Последняя минута · пик {peak:.2f} МиБ/с', 5)
-            y += 4
-        if y > height-1:
-            put(height-3, 2, 'Увеличьте окно / уменьшите шрифт для карты и графиков', 4)
-    put(height-2, 2, '[R] Регион [L] Журнал [U] Вид ' + ('[Ctrl+S] Старт' if ended else '[Ctrl+S] Стоп') + ' [Ctrl+Q] Выход', 5)
+                if previous is not None:put(row_number,map_x+start,segment,previous[0],previous[1])
+        city_y=map_y+map_height
+        verified=(m.state=='connected' and preview==m.selected and not m.demo)
+        city_note=' · ВЫХОД ПРОВЕРЕН' if verified else ' · DEMO / СИНТЕТИКА' if m.demo else ' · ВЫБРАНО'
+        put(city_y,map_x,'@ '+target['city']+' / '+target['country']+city_note,map_color,True)
+        if wide:
+            put(city_y+1,map_x,'Arrows orbit · +/- zoom · F focus · Space spin',5,dim=True)
+            duration=int(time.monotonic()-m.since) if m.since else 0
+            timer=f'{duration//3600:02}:{duration//60%60:02}:{duration%60:02}' if m.since else '—'
+            rows=[('CONNECTION',None),('Локация',m.city),('Выход',m.region),('Внешний IP',m.ip),
+                  ('Шлюз',m.gateway),('Сессия',timer),('Интерфейс',m.interface)]
+            y=5
+            for label,value in rows:
+                if value is None:
+                    put(y,panel_x,label,7,True)
+                else:
+                    put(y,panel_x,f'{label:<13} {value}',5,label=='Внешний IP' and verified)
+                y+=2 if height>=42 else 1
+            if m.demo:
+                put(min(y+1,height-12),panel_x,'RFC 5737 / TEST ADDRESS',7,True)
+        else:
+            if m.state=='off':put(city_y+1,map_x,'Отключено · Ctrl+S — подключить',5)
+            ip_label='DEMO IP' if m.demo else 'IP'
+            put(city_y+1,map_x,f'{ip_label} {m.ip}  EXIT {m.region}  GW {m.gateway}',7 if m.demo else 5)
+
+        if wide:
+            graph_y=height-9
+        else:
+            graph_y=city_y+2
+        graph_width=min(60 if wide else 20,width-4)
+        metric_color=7 if m.demo else 1
+        for offset,index,name,rate,total in [(0,1,'↓ DOWNLOAD',m.down,m.rx),(2,2,'↑ UPLOAD',m.up,m.tx)]:
+            bars,peak=graph(m.history,index,graph_width)
+            put(graph_y+offset,map_x,f'{name}  {rate:6.2f} MiB/s   TOTAL {volume(total)}',metric_color,True)
+            put(graph_y+offset+1,map_x,bars,metric_color)
+            if wide:
+                put(graph_y+offset+1,map_x+graph_width+3,f'PEAK {peak:.2f} MiB/s',5,dim=True)
+        if not wide and graph_y+5<height-4:
+            put(graph_y+4,map_x,'60 s rolling · '+('synthetic counters' if m.demo else 'tunnel interface counters'),5,dim=True)
+        elif wide:
+            put(height-3,map_x,'60 s rolling · '+('synthetic counters' if m.demo else 'tunnel interface counters'),5,dim=True)
+
+    spin_hint='Space reduced' if m.globe.reduced_motion else 'Space spin'
+    if width < 100:
+        put(height-4,2,'R regions · L journal · arrows orbit · +/- zoom · '+spin_hint+' · F focus',5)
+        put(height-3,2,'U glyphs · Ctrl+S stop/reconnect · Ctrl+Q exit',5)
+    else:
+        put(height-2,2,'R regions   L journal   Arrows orbit   +/- zoom   '+spin_hint+'   F focus   U glyphs   Ctrl+S stop   Ctrl+Q exit',5)
     if choosing is not None:
         box_width = min(width-4, 66)
         left = max(1, (width-box_width)//2)
-        top = max(5, (height-13)//2)
-        lines = ['ВЫБОР БЕСПЛАТНОГО РЕГИОНА · TVPN', '',
-                 *[('  › ' if index == choosing else '    ') + f"{info['city']:<18} {info['country']}  " + ("нет шлюзов Riseup" if m.counts.get(REGION_KEYS[index])==0 else str(m.counts[REGION_KEYS[index]])+" шлюз(а)" if REGION_KEYS[index] in m.counts else "проверка при подключении")
-                   for index, info in enumerate(REGIONS.values())], '',
+        top = max(4, (height-13)//2)
+        rows=[]
+        pulse=(not m.globe.reduced_motion and time.monotonic()-m.selection_changed<.36 and int(time.monotonic()*14)%2==0)
+        for index,info in enumerate(REGIONS.values()):
+            if index==choosing:
+                marker=('>' if pulse else '*') if m.art=='ascii' else ('»' if pulse else '›')
+                prefix='  '+marker+' '
+            else:prefix='    '
+            availability=('нет шлюзов Riseup' if m.counts.get(REGION_KEYS[index])==0 else
+                          str(m.counts[REGION_KEYS[index]])+' шлюз(а)' if REGION_KEYS[index] in m.counts else
+                          'проверка при подключении')
+            rows.append(prefix+f"{info['city']:<18} {info['country']}  "+availability)
+        lines = ['ВЫБОР БЕСПЛАТНОГО РЕГИОНА · TVPN', '',*rows, '',
                  '↑/↓ выбрать · Enter подключить · Esc отменить',
                  'Адреса шлюзов загружаются из каталога Riseup.',
                  'Текущее соединение сначала будет закрыто.']
         for offset, line in enumerate(lines):
             put(top+offset, left, line.ljust(box_width)[:box_width],
                 6 if 2 <= offset < 8 and m.counts.get(REGION_KEYS[offset-2])==0 else 4 if offset==choosing+2 else 5, offset==choosing+2 or offset==0)
-    credit='ttools / TVPN'
+    credit='TTOOLS / TVPN'
     put(height-1,max(2,width-len(credit)-2),credit,6,dim=True)
     if update is not None:
         box_width=min(width-4,72)
@@ -301,15 +365,17 @@ def draw(screen, m, journal, ended, choosing=None, update=None):
     screen.refresh()
 
 
-def run(script, selected='amsterdam'):
+def run(script, selected='amsterdam', demo=False, reduced_motion=False):
     try:
         locale.setlocale(locale.LC_ALL,'')
     except locale.Error:
         pass
-    m, messages = Model(selected,camera=SESSION_CAMERA), queue.Queue()
-    watcher=updater.Watcher(Path(__file__).parent) if os.environ.get('RISEUP_NO_UPDATE_CHECK')!='1' else None
+    SESSION_CAMERA.reduced_motion=bool(reduced_motion or os.environ.get('TVPN_NO_MOTION')=='1')
+    m, messages = Model(selected,camera=SESSION_CAMERA,demo=demo), queue.Queue()
+    watcher=updater.Watcher(Path(__file__).parent) if not demo and os.environ.get('RISEUP_NO_UPDATE_CHECK')!='1' else None
     # Backend owns sudo, certificate acquisition and all network cleanup.
-    command = [sys.executable if script.endswith('.py') else '/bin/bash', script,
+    backend=Path(__file__).with_name('demo_backend.py') if demo else Path(script)
+    command = [sys.executable if demo or str(backend).endswith('.py') else '/bin/bash', str(backend),
                '--text', '--events', '--region', selected]
     process = subprocess.Popen(command, stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -332,20 +398,24 @@ def run(script, selected='amsterdam'):
         else:
             process.send_signal(signal.SIGINT)
     closing = False
+    exit_after_cleanup = False
     def stop(signum=None, frame=None):
         nonlocal closing
-        # Ctrl+C also stops in place; TERM/HUP and explicit exit close the UI.
+        # Ctrl+C stops in place; external TERM/HUP close after backend return.
         closing = closing or signum != signal.SIGINT
         # Same foreground process group: backend also receives terminal Ctrl+C.
         if process.poll() is None:
             request_stop()
     old = {sig: signal.signal(sig, stop) for sig in dict.fromkeys((signal.SIGINT, signal.SIGTERM, getattr(signal, 'SIGHUP', signal.SIGTERM)))}
     def ui(screen):
-        nonlocal closing
+        nonlocal closing, exit_after_cleanup
         if termios is not None:
             modes = termios.tcgetattr(sys.stdin.fileno())
             modes[0] &= ~(termios.IXON | termios.IXOFF)
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSANOW, modes)
+        screen.keypad(True)
+        set_escdelay=getattr(curses,'set_escdelay',None)
+        if set_escdelay:set_escdelay(100)
         curses.curs_set(0)
         curses.start_color()
         curses.use_default_colors()
@@ -367,12 +437,18 @@ def run(script, selected='amsterdam'):
                 if line is None:
                     ended = True
                     if process.wait() not in (0, 130, 143, -2) or not m.cleanup:
+                        detail=(m.logs[-1][:120] if m.logs else
+                                m.detail if m.state=='error' else
+                                'Очистка backend не подтверждена; состояние сети неизвестно')
                         m.state = 'error'
-                        if m.logs:
-                            m.detail = m.logs[-1]
+                        m.detail = detail
                     elif m.state != 'error':
-                        m.state, m.detail = 'off', 'Туннель остановлен; DNS восстановлен'
+                        m.state, m.detail = 'off', (
+                            'Synthetic demo stopped; no network state changed' if demo else
+                            'Туннель остановлен; очистка завершена'
+                        )
                         m.ip = m.region = m.geo_city = '—'
+                        m.gateway = '—'
                         m.since = m.last = None
                         m.down = m.up = 0
                         m.history.clear()
@@ -381,7 +457,7 @@ def run(script, selected='amsterdam'):
                     m.line(line)
             now = time.monotonic()
             if not ended and now - sampled >= 1:
-                m.sample(now)
+                if not demo:m.sample(now)
                 sampled = now
             if watcher is not None and offer is None and pending_update is None:
                 offer=watcher.poll()
@@ -399,13 +475,18 @@ def run(script, selected='amsterdam'):
                 next_region = None
             if closing and ended:
                 return
+            if exit_after_cleanup and ended:
+                if m.cleanup:
+                    return
+                exit_after_cleanup = False
             key = screen.getch()
             if key == 17:  # Ctrl+Q: global exit, including menus and update prompts.
                 choosing = next_region = pending_update = offer = None
                 if ended:
                     return
+                exit_after_cleanup = True
                 m.state, m.detail = 'disconnecting', 'Выход: останавливаю VPN и восстанавливаю сеть…'
-                stop()
+                request_stop()
                 continue
             if closing:
                 continue
@@ -430,11 +511,12 @@ def run(script, selected='amsterdam'):
                     sh, sw = screen.getmaxyx()
                     top = max(5, (sh-13)//2)
                     left = max(1, (sw-min(sw-4, 66))//2)
+                    region_row=sh-2 if sw>=100 else sh-4
                     if choosing is None and m.globe.contains(mx,my):
                         if buttons & getattr(curses,'BUTTON4_PRESSED',0):m.globe.scale(1.12)
                         if buttons & getattr(curses,'BUTTON5_PRESSED',0):m.globe.scale(1/1.12)
                     if buttons & (curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED):
-                        if choosing is None and my == sh-2 and 2 <= mx < 13:
+                        if choosing is None and my == region_row and 2 <= mx < 13:
                             key = ord('r')
                         elif choosing is not None and left <= mx < left+min(sw-4, 66) and top+2 <= my < top+8:
                             choosing = my-top-2
@@ -442,7 +524,9 @@ def run(script, selected='amsterdam'):
                 except curses.error:
                     pass
             if choosing is not None:
+                old_choice=choosing
                 choosing,requested_region,message=advance_region_selection(choosing,key,m.counts)
+                if choosing!=old_choice:m.selection_changed=time.monotonic()
                 if message:m.detail=message
                 if requested_region is not None:
                     next_region=requested_region
@@ -476,6 +560,7 @@ def run(script, selected='amsterdam'):
                 continue
             if key in (ord('r'), ord('R')):
                 choosing = REGION_KEYS.index(m.selected)
+                m.selection_changed=time.monotonic()
             if key in (ord('l'), ord('L')):
                 journal = not journal
             if ended and key in (ord('q'), ord('Q'), 10, 27):
@@ -492,13 +577,15 @@ def run(script, selected='amsterdam'):
                 m.line(line)
                 break
             print(line, end='', flush=True)
-        (Path(__file__).parent/'.cleanup.json').write_text(json.dumps({'cleanup':'pending','region':selected}),encoding='utf-8')
+        if not demo:
+            (Path(__file__).parent/'.cleanup.json').write_text(json.dumps({'cleanup':'pending','region':selected}),encoding='utf-8')
         next_selected = curses.wrapper(ui)
     finally:
         if process.poll() is None:
             stop()
             process.wait()  # Never kill the backend before its cleanup finishes.
-        (Path(__file__).parent/'.cleanup.json').write_text(json.dumps({'cleanup':'ok' if m.cleanup else 'failed','region':m.selected}),encoding='utf-8')
+        if not demo:
+            (Path(__file__).parent/'.cleanup.json').write_text(json.dumps({'cleanup':'ok' if m.cleanup else 'failed','region':m.selected}),encoding='utf-8')
         process.stdin.close()
         if termios is not None and terminal_modes is not None:
             termios.tcsetattr(sys.stdin.fileno(), termios.TCSANOW, terminal_modes)
@@ -515,12 +602,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('script')
     parser.add_argument('--region', choices=REGION_KEYS, default='amsterdam')
+    parser.add_argument('--demo',action='store_true',help='Run a synthetic backend; no network or system changes')
+    parser.add_argument('--no-motion',action='store_true',help='Disable animated camera motion')
     options = parser.parse_args()
     selected=options.region
     while True:
         try:
-            with updater.lifecycle(Path(__file__).parent,'ui'):
-                result=run(options.script,selected)
+            if options.demo:
+                result=run(options.script,selected,demo=True,reduced_motion=options.no_motion)
+            else:
+                with updater.lifecycle(Path(__file__).parent,'ui'):
+                    result=run(options.script,selected,reduced_motion=options.no_motion)
         except updater.UpdateError as error:
             print(str(error),file=sys.stderr)
             sys.exit(1)
