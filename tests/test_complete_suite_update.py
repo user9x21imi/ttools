@@ -118,6 +118,8 @@ def _run_local_installer(argv,**kwargs):
     return subprocess.run(command,check=True,**kwargs)
 
 
+@unittest.skipUnless(dist.platform_id()=='linux-x86_64',
+                     'The complete five-component suite is supported only on Linux x86_64.')
 class CompleteSuiteUpdateE2E(unittest.TestCase):
     def setUp(self):
         self.temporary=tempfile.TemporaryDirectory(prefix='ttools-full-suite-e2e-')
