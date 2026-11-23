@@ -341,7 +341,8 @@ class UI:
             level=0 if weight<.12 else 1 if weight<.36 else 2 if weight<.72 else 3
             pair=ramp_pair(app['id'],level);self.visible.append((y,index))
             marker='|' if self.ascii_mode else accent_markers[min(8,round(weight*8))]
-            line=f'{marker}  {index+1:02}  {app.get("name",app["id"])}'
+            label='tsoundcloud' if app['id']=='tsoundcloud' else app.get('name',app['id'])
+            line=f'{marker}  {index+1:02}  {label}'
             if self.ascii_mode:line=line.encode('ascii','replace').decode()
             self.put(y,nav_x,line[:nav_width-1],pair,weight>=.72)
             if weight>.42 and y+1<geometry['bottom']:

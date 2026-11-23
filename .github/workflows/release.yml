@@ -63,6 +63,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./tests/windows/test_install_ps1.ps1
+      - name: Probe installed WinGet and Python on Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/windows/test_live_dependencies.ps1
+      - name: Physically install the verified Python.org fallback with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/windows/test_live_dependencies.ps1 -InstallVerifiedPythonFallback
       - name: Preview platform installation plan
         run: python installer.py --plan --allow-partial
   package:
@@ -95,12 +103,6 @@ jobs:
         with:
           name: ttools-release
           path: ${{ runner.temp }}/ttools-release
-      - name: Probe installed WinGet and Python on Windows PowerShell 5.1
-        shell: powershell
-        run: ./tests/windows/test_live_dependencies.ps1
-      - name: Physically install the verified Python.org fallback with PowerShell 7
-        shell: pwsh
-        run: ./tests/windows/test_live_dependencies.ps1 -InstallVerifiedPythonFallback
       - name: Install from release ZIP and PowerShell, verify state, launch and return
         shell: pwsh
         run: |

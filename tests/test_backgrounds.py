@@ -95,7 +95,7 @@ class BackgroundTests(unittest.TestCase):
             self.assertEqual(ui.s.refreshes,2)
 
     def test_responsive_layout_keeps_all_five_apps_at_reference_sizes(self):
-        apps=[{'id':name,'name':name,'command':['/usr/bin/true']} for name in ('tspotify','tsoundcloud','ttelegram','tvpn','tthings')]
+        apps=[{'id':name,'name':('SoundCloud' if name=='tsoundcloud' else name),'command':['/usr/bin/true']} for name in ('tspotify','tsoundcloud','ttelegram','tvpn','tthings')]
         class Screen:
             def __init__(self,w,h):self.w=w;self.h=h;self.cells={}
             def getmaxyx(self):return self.h,self.w
@@ -111,7 +111,10 @@ class BackgroundTests(unittest.TestCase):
             ui.selection_from=0;ui.selection_started=0;ui.selection_duration=.12;ui._paint_cache={}
             with patch('curses.color_pair',side_effect=lambda n:n):ui.draw()
             text=''.join(ui.s.cells.values())
-            for app in apps:self.assertIn(app['name'],text,(width,height,app['name']))
+            for app in apps:
+                expected='tsoundcloud' if app['id']=='tsoundcloud' else app['name']
+                self.assertIn(expected,text,(width,height,expected))
+            self.assertNotIn('SoundCloud',text)
             self.assertEqual(len(ui.visible),5)
             self.assertEqual(layout_for(width,height)['wide'],width>=116 and height>=30)
             if width>=116:self.assertTrue(any(0x2800<=ord(char)<=0x28ff for char in text))
