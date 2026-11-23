@@ -29,6 +29,16 @@ class ReleaseDiscoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'source commit'):
                 bootstrap.release_manifest(True)
 
+    def test_legacy_bundle_does_not_need_new_distribution_provenance_api(self):
+        # The first schema-1 public ZIP predates distribution.valid_source_commit.
+        self.assertIsNone(bootstrap.verify_bundle_commit(
+            {'schema_version':1,'version':'1.1.0-preview.1'},
+            {'version':'1.1.0-preview.1','platform':'windows-x86_64'}))
+        with self.assertRaisesRegex(ValueError,'source commit'):
+            bootstrap.verify_bundle_commit(
+                {'schema_version':2,'source_commit':'bad'},
+                {'source_commit':'bad'})
+
     def test_stable_excludes_preview_and_foreign_links(self):
         with patch.object(bootstrap,'read',return_value=self.feed('v1.1.0-preview.1','other-package')) as read:
             with self.assertRaisesRegex(RuntimeError,'No published'):bootstrap.release_manifest()

@@ -87,6 +87,14 @@ def target_platform():
     if not system or not arch:raise RuntimeError('Unsupported OS/architecture')
     return system+'-'+arch
 
+def verify_bundle_commit(manifest, bundle_info):
+    """Check schema-2 provenance without requiring a schema-2-era bundle API."""
+    commit=manifest.get('source_commit')
+    if commit is None:return
+    if (not isinstance(commit,str) or not re.fullmatch(r'[0-9a-f]{40}',commit)
+            or bundle_info.get('source_commit')!=commit):
+        raise ValueError('Suite source commit mismatch')
+
 def python314(prefix):
     if sys.version_info[:2]==(3,14):return Path(sys.executable)
     # uv's managed CPython is kept outside versioned releases, so rollback remains usable.
@@ -158,12 +166,10 @@ def main():
             package.extractall(folder/'unpacked')
         bundle=folder/'unpacked/ttools'
         sys.path.insert(0,str(bundle))
-        from ttools.distribution import verify_bundle,valid_source_commit
-        info=verify_bundle(bundle)
+        from ttools import distribution
+        info=distribution.verify_bundle(bundle)
         if info['version']!=manifest['version'] or info['platform']!=target:raise ValueError('Wrong bundle version/platform')
-        if manifest.get('source_commit') is not None:
-            if not valid_source_commit(manifest['source_commit']) or info.get('source_commit')!=manifest['source_commit']:
-                raise ValueError('Suite source commit mismatch')
+        verify_bundle_commit(manifest,info)
         if not args.no_system_deps:prepare_linux(selected)
         py=python314(prefix)
         argv=[str(py),str(bundle/'installer.py'),'--prefix',str(prefix),'--components',args.components]
