@@ -316,7 +316,7 @@ function Invoke-WingetPythonInstall([string]$WingetPath) {
     return $result.ExitCode
 }
 
-function Install-OfficialPython314 {
+function Install-OfficialPython314([string]$TargetDirectory) {
     $work = Join-Path ([IO.Path]::GetTempPath()) ('ttools-python-' + [guid]::NewGuid().ToString('N'))
     $installer = Join-Path $work 'python-3.14.10-amd64.exe'
     New-Item -ItemType Directory -Path $work -Force | Out-Null
@@ -332,6 +332,7 @@ function Install-OfficialPython314 {
         }
         $installArgs = @('/quiet', 'InstallAllUsers=0', 'PrependPath=0', 'Include_launcher=0',
                          'Include_pip=1', 'Include_test=0', 'AssociateFiles=0', 'Shortcuts=0')
+        if ($TargetDirectory) { $installArgs += ('TargetDir=' + $TargetDirectory) }
         Write-Host 'Installing Python for the current user without changing PATH or file associations...'
         $result = Invoke-NativeCommand $installer $installArgs 900000
         if ($result.ExitCode -ne 0) { throw ('The verified Python.org installer failed with exit code ' + $result.ExitCode + '. ' + $result.StdErr) }
