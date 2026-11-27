@@ -8,6 +8,8 @@ Date: 2026-11-28 (night session). Worktree: `C:\Users\user\source\repos\ttools-i
 3. Fixed Windows TTelegram payload verification: `core.autocrlf=true` was converting checked-in SHA-256-payload files to CRLF; `.gitattributes` marks the payload as binary and manifests were refreshed after the modernization merge. Downloaded payload via the verified tool (`tools/download_windows_telegram.py`, SHA-256 checked).
 4. Fixed pytest collection collision between the downloaded runtime payload and repo tests (`norecursedirs`).
 5. Built and installed a real Windows test package into an isolated prefix; no user install, no PATH/registry changes, no network/VPN setup changes.
+6. Cherry-picked only the useful `eb0fdbd` fix from a newly discovered remote branch `origin/fix/windows-support-and-launch` (`db993a5`); the regressive TVPN-restore commit on that branch was deliberately NOT merged.
+7. Preserved and committed a cloud agent's TSoundCloud PDCurses `set_escdelay` guard with regenerated wheel/checksums (`e746e87`); TSoundCloud tests remain green.
 
 ## Exact commands
 ```
@@ -43,9 +45,10 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 - Extracted ZIP to `C:\temp\ttg-night-unpacked\ttools`; ran `cmd /c "Install-ttools.cmd -Prefix C:\temp\ttg-one-cmd-test -Components tthings"` with `TTOOLS_INSTALLER_NO_PAUSE=1` → **exit 0**, installed tthings 0.7.2 into `1.1.0-preview.4`, no manual steps. One-command install validated end-to-end.
 - Final rebuild after all fixes: `C:\temp\ttg-final-release\ttools-windows-x86_64.zip` (94,166,354 bytes). Full one-command install of all four apps with system setup deferred: `cmd /c "Install-ttools.cmd -Prefix C:\temp\ttg-final-test2 -DeferSystem"` → **exit 0**. `runner.py --list` shows all four apps ready; TSpotify `verify-runtime` ok; TVPN `version` 1.4.1 and `status` ok; TTelegram `doctor` ok. A run without `-DeferSystem` fails only because winget is absent in this environment (external dependency, not a code regression).
 - Independent final rebuild from this worktree at `b18fe95`: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-final-release --platform windows-x86_64` → 159,117,158 bytes (full source tree including both Telegram payload copies). Install: `python installer.py --prefix C:\Users\user\AppData\Local\Temp\opencode\ttools-final-prefix --bundle . --no-shortcuts --defer-system` → `{"installed":"1.1.0-preview.4","complete":false,"unsupported":[]}`; `runner.py --list` shows 4 apps ready; TVPN `version`/`status`/`doctor` and TTelegram `doctor` rechecked OK.
+- Rebuild after `db993a5`/`e746e87`: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-default-components-release --platform windows-x86_64` → 159,117,753 bytes. `C:\Users\user\AppData\Local\Temp\opencode\check_install_defaults.py` verifies offline (mocked network/subprocess) that a plain Windows install selects exactly `tspotify,ttelegram,tvpn,tthings` in both `bootstrap.py` and `install-local.py`; SoundCloud is excluded. No actual install or system change was performed by this smoke. Root suite re-run: 79 passed, 12 skipped, 6 subtests.
 
 ## Remote
-- `git push origin integration/windows-preview`: `9724404..eddca75`. All commits are pushed; local branch matches remote. No GitHub Release was published — release awaits user acceptance.
+- `git push origin integration/windows-preview`: through `01776db`. Two newest local commits (`db993a5`, `e746e87`) still need pushing. No GitHub Release was published — release awaits user acceptance.
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
 - All cloud-agent artifacts are now committed and verified; no in-flight TTelegram edits remain in this worktree.
 
