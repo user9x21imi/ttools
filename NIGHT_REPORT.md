@@ -45,7 +45,7 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 - Independent final rebuild from this worktree at `b18fe95`: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-final-release --platform windows-x86_64` → 159,117,158 bytes (full source tree including both Telegram payload copies). Install: `python installer.py --prefix C:\Users\user\AppData\Local\Temp\opencode\ttools-final-prefix --bundle . --no-shortcuts --defer-system` → `{"installed":"1.1.0-preview.4","complete":false,"unsupported":[]}`; `runner.py --list` shows 4 apps ready; TVPN `version`/`status`/`doctor` and TTelegram `doctor` rechecked OK.
 
 ## Remote
-- `git push origin integration/windows-preview`: `9724404..b18fe95`. All commits are pushed; local branch matches remote. No GitHub Release was published — release awaits user acceptance.
+- `git push origin integration/windows-preview`: `9724404..eddca75`. All commits are pushed; local branch matches remote. No GitHub Release was published — release awaits user acceptance.
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
 - All cloud-agent artifacts are now committed and verified; no in-flight TTelegram edits remain in this worktree.
 

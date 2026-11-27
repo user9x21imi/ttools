@@ -18,7 +18,7 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 - `72469c1` direct VT backend for launcher on Windows (`ttools/vtbackend.py`, PDCurses fallback for headless) — reviewed: no bkgd, default `-1` backgrounds emit no SGR, full curses API used by launcher/components present
 - `8a0965d` TTelegram: find `wt.exe` via per-user app execution alias
 - `364baf7`, `67416f4` night docs + VT shims for TSpotify/TVPN (`_vt.py`) and TTelegram launch hardening; `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` committed
-- `7e4ddde`, `4c320ad`, `b18fe95` final night status/task updates; all commits pushed to `origin/integration/windows-preview`
+- `7e4ddde`, `4c320ad`, `b18fe95`, `eddca75` final night status/task updates; all commits pushed to `origin/integration/windows-preview`
 
 ## Component state
 | Component | Branch/commits | State | Tests |
@@ -46,7 +46,7 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 - Final rebuild after all fixes: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-final-release --platform windows-x86_64` → 159,117,158 bytes; isolated install to `C:\Users\user\AppData\Local\Temp\opencode\ttools-final-prefix --no-shortcuts --defer-system` → `{"installed":"1.1.0-preview.4","complete":false,"unsupported":[]}`; `runner.py --list` shows 4 supported apps. No user install or system changes.
 
 ## Remote state
-- Pushed `integration/windows-preview` `9724404..b18fe95` to `origin`; local branch matches remote, no pending commits.
+- Pushed `integration/windows-preview` `9724404..eddca75` to `origin`; local branch matches remote, no pending commits.
 - Created Draft PR #8: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
 - A cloud VT agent had switched this worktree to `fix/vt-console-mode-transparency`; the branch was safely restored to `integration/windows-preview` and all of that agent's work was preserved, reviewed and integrated. No in-flight edits remain.
 

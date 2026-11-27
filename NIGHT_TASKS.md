@@ -51,6 +51,6 @@
 
 ## Next Steps
 
-1. All agent work integrated, verified and pushed to `origin/integration/windows-preview` (`9724404..b18fe95`); Draft PR #8 open.
+1. All agent work integrated, verified and pushed to `origin/integration/windows-preview` (`9724404..eddca75`); Draft PR #8 open.
 2. Rebuilds and isolated installs were re-run from final commits; smoke checks pass.
 3. User to verify real VPN connect, Telegram auth, Spotify login, visual transparency; no user-facing release published.
