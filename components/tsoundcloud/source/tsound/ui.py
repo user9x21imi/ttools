@@ -1378,7 +1378,15 @@ class App:
         self.screen.keypad(True)
         self.screen.timeout(40)
         curses.raw()
-        curses.set_escdelay(35)
+        # PDCurses (windows-curses) has no set_escdelay; its ESC timeout is
+        # configured by the console instead.  Keep the short delay on curses
+        # implementations that support it (ncurses).
+        set_escdelay = getattr(curses, "set_escdelay", None)
+        if set_escdelay is not None:
+            try:
+                set_escdelay(35)
+            except curses.error:
+                pass
         curses.noecho()
         try:
             curses.curs_set(0)
