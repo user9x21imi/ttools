@@ -28,7 +28,10 @@ the TVPN agent signs off, even though that branch is based on `1827e6b`.
 ## Verification (Windows 11 x64)
 - `python -m unittest discover -s tests` → **83 OK, 12 skipped**.
 - `python -m unittest tests.test_windows_regression` → **15 OK**.
-- `python -m pytest components/tspotify/source` → **372 passed, 2 skipped**.
+- `python -m pytest components/tspotify/source` → **372 passed, 2 skipped**
+  (set `PYTHONPATH` to this worktree's `components/tspotify/source/src`; another
+  worktree has an editable install that otherwise shadows `tspotify` and causes
+  5 unrelated failures).
 - `python -m pytest components/tthings/source` → **60 passed, 7 skipped** (+4870 subtests).
 - `pwsh -File tests/windows/test_install_ps1.ps1` and PowerShell 5.1 → both pass.
 - Real ConPTY flow: launcher lists `APPLICATIONS / 05`, launches tthings and TSpotify
