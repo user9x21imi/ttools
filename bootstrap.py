@@ -135,9 +135,13 @@ def main():
             if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     p=argparse.ArgumentParser(description='One-command ttools suite bootstrap')
     p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true');p.add_argument('--defer-system',action='store_true')
-    p.add_argument('--components',default='tspotify,tsoundcloud,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')
+    p.add_argument('--components',default=None);p.add_argument('--no-system-deps',action='store_true')
     args=p.parse_args()
     target=target_platform()
+    if args.components is None:
+        # Skip components with no native package on this platform (SoundCloud is Linux-only).
+        args.components=','.join(('tspotify','ttelegram','tvpn','tthings') if target=='windows-x86_64' else
+                                 ('tspotify','tsoundcloud','ttelegram','tvpn','tthings'))
     selected=args.components.split(',')
     # Reject unsupported complete installations before downloading/installing anything.
     if target not in ('linux-x86_64','windows-x86_64') and 'ttelegram' in selected and not args.allow_partial:

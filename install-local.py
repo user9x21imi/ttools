@@ -6,7 +6,7 @@ import subprocess
 import sys
 from bootstrap import prepare_linux,python314
 from ttools.distribution import prefix_path,platform_id,verify_bundle
-from ttools.suite import APP_IDS,plan
+from ttools.suite import APP_IDS,default_components,plan
 
 def main():
     parser=argparse.ArgumentParser()
@@ -14,17 +14,23 @@ def main():
     parser.add_argument('--defer-system',action='store_true')
     parser.add_argument('--preview',action='store_true')
     parser.add_argument('--prefix')
-    parser.add_argument('--components',default=','.join(APP_IDS))
+    parser.add_argument('--components',default=None)
     args=parser.parse_args()
     root=Path(__file__).resolve().parent
     metadata=verify_bundle(root)
     if metadata['platform']!=platform_id():raise RuntimeError('Download the ZIP for this OS/architecture')
-    selected=args.components.split(',')
+    if args.components is None:
+        # Skip components with no native package on this platform (e.g. SoundCloud on Windows).
+        selected=default_components(platform_id())
+        components_arg=','.join(selected)
+    else:
+        selected=args.components.split(',')
+        components_arg=args.components
     proposal=plan(root,platform_id(),selected,args.allow_partial)
     prefix=prefix_path(args.prefix)
     prepare_linux(proposal['install'])
     python=python314(prefix)
-    argv=[str(python),str(root/'installer.py'),'--prefix',str(prefix),'--components',args.components]
+    argv=[str(python),str(root/'installer.py'),'--prefix',str(prefix),'--components',components_arg]
     if args.allow_partial:argv.append('--allow-partial')
     if args.defer_system:argv.append('--defer-system')
     subprocess.run(argv,check=True)
