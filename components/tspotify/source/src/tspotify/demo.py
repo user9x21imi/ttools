@@ -39,7 +39,7 @@ class Demo:
                 id=str(i),
                 name=name,
                 type="track",
-                artists=[{"name": artist}],
+                artists=[{"id": "demo-artist", "name": artist}],
                 album={"id": "demo", "name": "After Hours", "images": [{"url": "demo:cover"}]},
                 duration_ms=240000,
             )
@@ -115,12 +115,55 @@ class Demo:
         return self.saved
 
     def search(self, query):
+        tracks = [
+            copy.deepcopy(x)
+            for x in self.tracks
+            if query.lower() in (x["name"] + " " + x["artists"][0]["name"]).lower()
+        ]
+        artists = [
+            {
+                "id": "demo-artist",
+                "name": "Ghosts on Tape",
+                "images": [{"url": "demo:cover"}],
+                "genres": ["ambient electronic"],
+            }
+        ] if "ghost" in query.lower() or "artist" in query.lower() else []
         return {
-            "tracks": [
-                copy.deepcopy(x)
-                for x in self.tracks
-                if query.lower() in (x["name"] + " " + x["artists"][0]["name"]).lower()
-            ]
+            "tracks": tracks,
+            "artists": artists,
+        }
+
+    def artist_profile(self, item_id, name=""):
+        artist = {
+            "id": item_id,
+            "name": name or "Ghosts on Tape",
+            "images": [{"url": "demo:cover"}],
+            "genres": ["ambient electronic"],
+        }
+        albums = [
+            {
+                "id": "demo-album-1",
+                "name": "After Hours",
+                "album_type": "album",
+                "_artist_group": "album",
+                "release_date": "2024",
+                "total_tracks": 8,
+                "images": [{"url": "demo:cover"}],
+            },
+            {
+                "id": "demo-album-2",
+                "name": "Soft Signals",
+                "album_type": "single",
+                "_artist_group": "single",
+                "release_date": "2025-03",
+                "total_tracks": 2,
+                "images": [{"url": "demo:cover"}],
+            },
+        ]
+        return {
+            "artist": artist,
+            "releases": {"album": albums[:1], "single": albums[1:], "appears_on": [], "compilation": []},
+            "catalog_label": "Доступный каталог релизов",
         }
 
 

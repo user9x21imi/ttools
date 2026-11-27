@@ -101,11 +101,16 @@ Desktop Spotify being installed is not the same as it being an available device:
 
 | Key | Action |
 | --- | --- |
-| `/`, `F2` | Focus search; Enter submits |
+| `/`, `F2` | Search Spotify; Enter submits |
+| `0`–`4` in search | All, tracks, artists, albums, playlists |
+| `n` in search | Load the next result page |
 | `Tab`, `Esc` | Switch focus / leave search |
 | `↑` / `↓`, `PgUp` / `PgDn` | Select / scroll |
-| `Enter` | Open a playlist/album; play a selected track |
-| `P` | Start the whole selected playlist/album |
+| `Enter` | Open artist/album/playlist; play a selected track |
+| `P` | Start the selected album/playlist |
+| `g` | Open the current track's artist profile |
+| `y`, `Y` | Copy the current artist or selected Spotify item's link |
+| `1`–`4` on an artist page | Albums, singles/EP, appearances, all releases |
 | `←`, `Backspace` | Return to the previous list |
 | `Space`, `n`, `p` | Play/pause, next, previous |
 | `+`, `-`, `m` | Volume, mute/restore |
@@ -113,9 +118,9 @@ Desktop Spotify being installed is not the same as it being an available device:
 | `F10`, `F11`, `F12` | Mute/restore, volume down 5%, volume up 5% |
 | `f` | Save / remove the current track from your library |
 | `1`, `2`, `3` | Playlists, liked tracks, albums |
-| `4`, `5`, `6`, `7`, `8` | Recent history, saved Spotify mixes, new releases, recommendations, saved daily mixes |
+| `4`, `5`, `6`, `7`, `8` | Recent history, saved mixes, new releases*, recommendations, daily mixes |
 | `F3`, expand button, cover click | Expanded artwork, track details and a smooth dotted spectrum; F3/Esc returns |
-| Mouse | Hover focuses panels; single click opens a playlist or plays a track, wheel scrolls; tabs and controls are clickable |
+| Mouse | Single click opens artist/album/playlist or plays a track; tabs and controls are clickable |
 | `a` | Dots / text ASCII / block artwork |
 | `s`, `r` | Shuffle, repeat |
 | `L` | Layout editor: arrows select, `K`/`J` move, `c` swaps cover side, `v` toggles spectrum, Enter saves |
@@ -176,7 +181,9 @@ Run `tspotify update` to check manually. Source checkouts keep their development
 
 ### Discovery sections
 
-Recent history includes available playlist/album contexts and unique recently played tracks. New releases and recommendations use Spotify data, with recommendations seeded by your own top tracks. Your Mixes and Daily Mixes show Spotify mixes saved in your library: save the desired mix in the official app to make it available here. These do not duplicate Spotify's private Home feed or pre-save countdowns. Availability depends on the authorization/API access granted by Spotify; restricted endpoints show an explanation rather than unrelated replacement content.
+Search returns separate track, artist, album, and playlist results. Artist profiles show the Spotify artist metadata and the available album, single/EP, appearance, and compilation catalog, with full endpoint pagination. Spotify no longer exposes the artist top-tracks ranking in Development Mode, so tspotify labels this as the available release catalog and does not invent a popularity order. Spotify also removed the browse-new-releases endpoint in Development Mode; use Spotify search for new releases. Your Mixes and Daily Mixes show Spotify mixes saved in your library. Availability depends on Spotify authorization and quota mode; unavailable catalog groups are identified instead of replaced with unrelated content.
+
+`New releases*` is unavailable for Spotify Development Mode apps because the corresponding browse endpoint was removed.
 
 The expanded player uses 256×256 artwork and a real dotted spectrum. Mouse tracking is enabled only while the interface is open. Hold Shift when selecting text if your terminal reserves normal mouse actions for the application.
 

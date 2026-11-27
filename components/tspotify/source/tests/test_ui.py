@@ -65,6 +65,19 @@ def app(monkeypatch):
         start_context=record("start_context", "playing"),
         control=record("control", "done"),
         context=record("context", {"name": "Mix", "tracks": [track], "context_uri": "spotify:playlist:p"}),
+        artist_profile=record(
+            "artist_profile",
+            {
+                "artist": {"id": "ar", "name": "Artist", "images": [], "genres": ["ambient"]},
+                "releases": {
+                    "album": [{"id": "al", "name": "Album", "album_type": "album", "release_date": "2024", "total_tracks": 8}],
+                    "single": [{"id": "si", "name": "Single", "album_type": "single", "release_date": "2025", "total_tracks": 2}],
+                    "appears_on": [{"id": "ap", "name": "Appears On", "album_type": "compilation", "release_date": "2023"}],
+                    "compilation": [],
+                },
+                "catalog_label": "Доступный каталог релизов",
+            },
+        ),
         toggle_favorite=record("favorite", False),
         library=lambda section: (
             section,
@@ -122,7 +135,7 @@ def test_search_focus_unicode_query_and_results(app):
     app.key("Музыка")
     app.key("\n")
     settle(app)
-    assert app.test_calls[-1] == ("search", ("Музыка",))
+    assert app.test_calls[-1] == ("search", ("Музыка", "all", 0))
     assert app.items[0][0] == "track"
     app.key("\t")
     assert app.editing
@@ -470,6 +483,115 @@ def test_panel_transition_only_redraws_cells_that_changed(app):
     app.render()
     assert app._display_grid != app._last_grid
     assert 0 < len(app.s.calls) < height * width // 2
+
+
+@pytest.mark.parametrize("size", [(24, 80), (40, 120), (50, 180)])
+def test_motion_enabled_f3_entry_and_exit_render_intermediate_frames(app, size):
+    def cells(grid):
+        return [[cell for cell in row] for row in grid.cells]
+
+    app.s.size = size
+    app.motion_enabled = True
+    app.low_power = False
+    app.render()
+    base = time.monotonic() + 10
+    source = app._display_grid.clone()
+    app.key(curses.KEY_F3)
+    app.panel_transition = (source, base, 0.21)
+    app.render()
+    entrance_start = app._display_grid.clone()
+    app._finish_render(now=base + 0.105)
+    entrance_middle = app._display_grid.clone()
+    app._finish_render(now=base + 0.22)
+    entrance_end = app._display_grid.clone()
+    assert cells(entrance_start) == cells(source)
+    assert cells(entrance_middle) != cells(entrance_start) and cells(entrance_middle) != cells(entrance_end)
+    assert app.fullscreen and app.spectrum_area
+
+    exit_base = base + 1
+    app.key(curses.KEY_F3)
+    exit_source = app._display_grid.clone()
+    app.panel_transition = (exit_source, exit_base, 0.21)
+    app.render()
+    exit_start = app._display_grid.clone()
+    app._finish_render(now=exit_base + 0.105)
+    exit_middle = app._display_grid.clone()
+    app.items.append(("playlist", {"id": "p2", "name": "Second Playlist"}))
+    app.key(curses.KEY_DOWN)
+    assert app.selected == 1
+    app._finish_render(now=exit_base + 0.22)
+    exit_end = app._display_grid.clone()
+    assert cells(exit_start) == cells(exit_source)
+    assert cells(exit_middle) != cells(exit_start) and cells(exit_middle) != cells(exit_end)
+    assert not app.fullscreen
+
+
+def test_artist_search_opens_profile_and_album_back_restores_artist_selection(app):
+    artist = {"id": "ar", "name": "Artist", "images": []}
+    track = {"id": "t", "name": "Track", "type": "track", "artists": [{"name": "Artist"}]}
+    app.section = "Поиск: Artist"
+    app.query = "Artist"
+    app.search_layout = True
+    app.search_suspended = False
+    app.items = [("track", track), ("artist", artist)]
+    app.selected = 1
+
+    app.key("\n")
+    settle(app)
+    assert app.section == "ARTIST / Artist"
+    assert app.artist_profile and app.items[0][1]["id"] == "al"
+    app.select_artist_group("single")
+    assert app.items[0][1]["id"] == "si"
+    app.key("\n")
+    settle(app)
+    assert app.section == "Mix"
+    app.key("\n")
+    settle(app)
+    assert app.test_calls[-1][0] == "start"
+    app.key(curses.KEY_LEFT)
+    assert app.section == "ARTIST / Artist"
+    assert app.artist_group == "single" and app.selected == 0
+    app.key(curses.KEY_LEFT)
+    assert app.section == "Поиск: Artist" and app.selected == 1
+    assert app.query == "Artist" and app.search_layout
+
+
+def test_search_category_and_pagination_are_keyboard_accessible(app):
+    app.search_layout = True
+    app.search_suspended = False
+    app.query = app.search_query = "Artist"
+    app.search_paging["artist"] = {"next": "next"}
+    app.key("2")
+    assert app.search_category == "artist"
+    app.key("n")
+    settle(app)
+    assert app.test_calls[-1] == ("search", ("Artist", "artist", 10))
+
+
+def test_artist_page_is_reached_from_now_playing_hotkey(app):
+    app.playback["item"]["artists"] = [{"id": "ar", "name": "Artist"}]
+    app.key("g")
+    settle(app)
+    assert app.artist_profile and app.section == "ARTIST / Artist"
+
+
+def test_same_name_artist_search_results_keep_distinct_ids_and_metadata(app, monkeypatch):
+    results = [
+        {"id": "aaaaaaartist1", "name": "The Same Name", "genres": ["ambient"]},
+        {"id": "bbbbbbartist2", "name": "The Same Name", "genres": ["jazz"]},
+    ]
+    monkeypatch.setattr(ui.API, "search", lambda query, category, offset: {"artists": results, "_paging": {}})
+    app.key("/")
+    app.query = "The Same Name"
+    app.schedule_search()
+    app.dispatch_search()
+    settle(app)
+    app.select_search_category("artist")
+    assert [item["id"] for _, item in app.items] == ["aaaaaaartist1", "bbbbbbartist2"]
+    app.render()
+    rendered = "\n".join("".join(cell.glyph for cell in row) for row in app._last_grid.cells)
+    assert "ambient · ID aaaaaa" in rendered
+    assert "jazz · ID bbbbbb" in rendered
 
 
 def test_live_frame_writes_resume_after_panel_transition_completes(app):
@@ -1053,7 +1175,7 @@ def test_search_suggests_after_typing_without_enter(app, monkeypatch):
     now[0] += 0.2
     app.update_live_search()
     settle(app)
-    assert ("search", ("abc",)) in app.test_calls
+    assert ("search", ("abc", "all", 0)) in app.test_calls
     assert app.editing
     assert app.section == "Поиск: abc"
     app.key(curses.KEY_DOWN)
@@ -1267,7 +1389,7 @@ def test_f2_keeps_global_search_available_inside_playlist(app):
     app.query = "everywhere"
     app.dispatch_search()
     settle(app)
-    assert ("search", ("everywhere",)) in app.test_calls
+    assert ("search", ("everywhere", "all", 0)) in app.test_calls
 
 
 def test_escape_clears_collection_filter_and_restores_all_tracks(app):
