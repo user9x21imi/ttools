@@ -7,8 +7,7 @@ from datetime import date
 from tg.msg import MsgProxy
 from tg.utils import string_len_dwc, truncate_to_len
 from tg.colors import get_color, cyan, white, bold
-
-CHAT_TRANSITION_SECONDS = .42
+from chat_transition import CHAT_TRANSITION_SECONDS, CHAT_TRANSITION_GLYPHS, chat_transition_state
 
 class RenderElements(tuple):
     def __new__(cls,values,index,message_id):
@@ -451,8 +450,8 @@ def draw_messages(view, current, msgs, min_msg_padding, chat):
     now = time.monotonic()
     transition_age = now - transition if transition else CHAT_TRANSITION_SECONDS
     transition_active = bool(transition and 0 <= transition_age < CHAT_TRANSITION_SECONDS)
-    phase = min(1.0, max(0.0, transition_age / CHAT_TRANSITION_SECONDS))
-    glyph = ('·', '◦', '●')[min(2, int(phase * 3))]
+    progress = min(1.0, max(0.0, transition_age / CHAT_TRANSITION_SECONDS))
+    glyph = CHAT_TRANSITION_GLYPHS[chat_transition_state(transition_age)]
     _put(view.win, 0, 0, 'ПЕРЕПИСКА  /  ' + truncate_to_len(title, max(0, w - 20)), accent | bold)
     _put(view.win, 0, max(1, w - 3), glyph, accent | curses.A_DIM)
     _put(view.win, 1, 0, '─' * max(1, w - 1), muted)
@@ -510,7 +509,7 @@ def draw_messages(view, current, msgs, min_msg_padding, chat):
         cursor = top + block['height'] - 1
     placed.sort(key=lambda item: item[1])
     if transition_active and len(placed) > 1:
-        eased = 1.0 - (1.0 - phase) ** 2
+        eased = 1.0 - (1.0 - progress) ** 2
         reveal_count = max(1, min(len(placed), math.ceil(eased * len(placed))))
         reveal_order = sorted(placed, key=lambda item: (abs(item[0] - anchor), -item[1]))
         visible_positions = {position for position, _ in reveal_order[:reveal_count]}
@@ -587,10 +586,10 @@ def animate_messages(controller, now=None):
     engine = getattr(controller, 'engine', None)
     accent = get_color(cyan, -1) | curses.A_DIM
     transition = getattr(engine, 'transition_started', 0) if engine else 0
+    glyph = CHAT_TRANSITION_GLYPHS[-1]
     if transition and now - transition < CHAT_TRANSITION_SECONDS:
-        phase = min(2, int((now - transition) / (CHAT_TRANSITION_SECONDS / 3)))
-        glyph = ('·', '◦', '●')[phase]
-        _put(view.win, 0, max(1, view.w - 3), glyph, accent)
+        glyph = CHAT_TRANSITION_GLYPHS[chat_transition_state(now - transition)]
+    _put(view.win, 0, max(1, view.w - 3), glyph, accent)
     for row, column, started in getattr(view, '_incoming_marks', []):
         age = now - started
         if age < .18:

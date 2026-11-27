@@ -96,6 +96,11 @@ def safe_current_id(c):
     try:return c.model.current_msg_id
     except (IndexError,KeyError):return None
 
+def grid_row_text(window,row):
+    raw=getattr(window,'win',window)
+    try:return ''.join(char or '' for char,attr in raw.grid[row])
+    except (AttributeError,IndexError,TypeError):return ''
+
 def snapshot(controller,path):
     from PIL import Image,ImageDraw,ImageFont,ImageOps
     import vtcurses
@@ -150,9 +155,31 @@ def save_snapshot(controller,path):
         import traceback
         demo_path('tt-native-test-report-error.txt').write_text(traceback.format_exc(),encoding='utf-8')
 
+def frozen_window(window):
+    """Copy a VT window so screenshot encoding never blocks the UI thread."""
+    class FrozenWindow:
+        def __init__(self,source):
+            self.grid=[list(row) for row in getattr(source,'grid',[])]
+            self._size=source.getmaxyx();self._origin=source.getbegyx()
+        def getmaxyx(self):return self._size
+        def getbegyx(self):return self._origin
+    return FrozenWindow(getattr(window,'win',window))
+
+def frozen_controller(controller):
+    from types import SimpleNamespace
+    view=controller.view
+    copied=SimpleNamespace(stdscr=frozen_window(view.stdscr))
+    for name in ('chats','msgs','status'):
+        original=getattr(view,name)
+        clone=SimpleNamespace(win=frozen_window(original.win),_editorial_media=[])
+        setattr(copied,name,clone)
+    panels=[(frozen_window(window),title) for window,title in getattr(controller,'_panels',[])]
+    return SimpleNamespace(view=copied,_panels=panels)
+
 def report():
     import recovery
-    captured=set();transition_key=None;transition_last=0;transition_index=0;transition_count=0;drawing_since=None;trace_dumped=False
+    from render_layout import CHAT_TRANSITION_SECONDS,chat_transition_state
+    captured=set();transition_key=None;transition_phases=set();transition_count=0;drawing_since=None;trace_dumped=False
     while True:
         c=recovery.CURRENT
         if c:
@@ -164,18 +191,40 @@ def report():
                     trace_dumped=True
             else:drawing_since=None;trace_dumped=False
             engine=getattr(c,'engine',None)
+            refresh=getattr(c.view.msgs,'_refresh',None)
+            if refresh and getattr(c.view.msgs,'_demo_refresh_observer',None) is not refresh:
+                original_refresh=c.view.msgs._refresh
+                def observe_refresh():
+                    nonlocal transition_key,transition_count
+                    original_refresh()
+                    active_engine=getattr(c,'engine',None)
+                    started=getattr(active_engine,'transition_started',0) if active_engine else 0
+                    if not started:return
+                    if transition_key!=started:
+                        transition_key=started;transition_phases.clear();transition_count+=1
+                    age=time.monotonic()-started
+                    if not 0<=age<CHAT_TRANSITION_SECONDS:return
+                    phase=chat_transition_state(age)
+                    raw=getattr(c.view.msgs.win,'win',c.view.msgs.win)
+                    try:glyph=raw.grid[0][raw.getmaxyx()[1]-3][0]
+                    except (IndexError,TypeError):return
+                    if glyph!=('·','◦','○','●')[phase] or phase in transition_phases:return
+                    transition_phases.add(phase)
+                    if transition_count==1:
+                        image_controller=frozen_controller(c)
+                        threading.Thread(target=save_snapshot,args=(image_controller,DEMO_DIR/'transition-frames'/f'frame-{phase:02d}.png'),daemon=True).start()
+                c.view.msgs._demo_refresh_observer=observe_refresh
+                c.view.msgs._refresh=observe_refresh
             if engine and engine.transition_started:
                 if transition_key!=engine.transition_started:
-                    transition_key=engine.transition_started;transition_index=0;transition_last=0;transition_count+=1
-                age=time.monotonic()-transition_key
-                if transition_count==1 and 0<=age<.42 and time.monotonic()-transition_last>=.035:
-                    save_snapshot(c,DEMO_DIR/'transition-frames'/f'frame-{transition_index:02d}.png')
-                    transition_index+=1;transition_last=time.monotonic()
-            if (c.view_mode=='chats' and c.view.chats.w
+                    transition_key=engine.transition_started;transition_phases.clear();transition_count+=1
+            visible_chats=getattr(c.view.chats,'mouse_chats',[])
+            chat_list_drawn=bool(visible_chats and 'ДИАЛОГИ' in grid_row_text(c.view.chats.win,0)
+                                 and visible_chats[0].get('title','') in grid_row_text(c.view.chats.win,3))
+            if (c.view_mode=='chats' and c.view.chats.w and chat_list_drawn
                     and len(getattr(c.view.chats,'mouse_chats',[]))>=min(10,len(c.model.chats.chats))
                     and 'list' not in captured):
                 save_snapshot(c,DEMO_DIR/'artifacts'/'chat-list.png');captured.add('list')
-            visible_chats=getattr(c.view.chats,'mouse_chats',[])
             if (c.view_mode=='messages' and c.view.msgs.w and not getattr(engine,'transition_started',0)
                     and getattr(c.view.msgs,'_draw_layout',[])
                     and len(visible_chats)>=min(10,len(c.model.chats.chats)) and 'conversation' not in captured):
@@ -185,6 +234,7 @@ def report():
                 'focus':getattr(getattr(c,'engine',None),'focus',None),'buffer':c.view.status.buffer,
                 'count':len(c.model.chats.chats),
                 'visible_chats':len(getattr(c.view.chats,'mouse_chats',[])),
+                'chat_list_drawn':chat_list_drawn,
                 'list_index':getattr(getattr(c,'engine',None),'list_index',0),
                 'list_offset':getattr(getattr(c,'engine',None),'list_offset',0),
                 'history_count':len(c.model.msgs.msg_ids.get(c.model.current_chat_id,[])) if c.model.current_chat_id is not None else 0,
@@ -196,6 +246,10 @@ def report():
                 'current_id':safe_current_id(c),'queue':c.queue.qsize(),
                 'pending':getattr(c,'_frame_pending',False),
                 'transition_count':transition_count,
+                'transition_phases':sorted(transition_phases),
+                'chat_rect':getattr(c.view.chats,'panel_rect',(0,0,0,0)),
+                'chat_rows':getattr(c.view.chats,'mouse_rows',[]),
+                'chat_ids':[item.get('id') for item in getattr(c.view.chats,'mouse_chats',[])],
                 'drawn_ids':[getattr(e,'message_id',None) for e,selected,row in getattr(c.view.msgs,'_draw_layout',[]) if selected],
                 'attachments':c.view.status.attachments,
                 'voice':None if not getattr(getattr(c,'engine',None),'voice',None) else {'progress':c.engine.voice.progress,'played':c.engine.voice.play_seconds,'duration':c.engine.voice.play_duration,'state':c.engine.voice.state,'playing':c.engine.voice.playing,'levels':list(c.engine.voice.levels),'path':str(c.engine.voice.path)}

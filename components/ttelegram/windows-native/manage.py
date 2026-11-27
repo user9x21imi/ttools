@@ -81,13 +81,15 @@ def doctor(root):
         checks['windows_64bit']=sys.maxsize>2**32
         import tdjson
         checks['tdlib']=json.loads(tdjson.td_execute(b'{"@type":"getOption","name":"version"}'))
+        # Telegram imports curses at module load time. Install the VT shim
+        # before importing tg so Windows never asks for the unavailable _curses.
+        import windows_bootstrap
+        windows_bootstrap.install()
         import PIL,qrcode,rlottie_python,sounddevice,imageio_ffmpeg,telegram,tg
         checks['imports']=True
         ffmpeg=imageio_ffmpeg.get_ffmpeg_exe();result=subprocess.run([ffmpeg,'-version'],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
         checks['ffmpeg']=result.returncode==0
         # Import every platform module without creating a Telegram session or opening the microphone.
-        import windows_bootstrap
-        windows_bootstrap.install()
         import client,engine,media,windows_audio,windows_desktop,vtcurses
         checks['client_imports']=True
     except Exception as problem:report['error']=str(problem)
