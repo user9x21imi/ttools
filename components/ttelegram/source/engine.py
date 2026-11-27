@@ -382,10 +382,38 @@ def install():
     @synchronized
     def render(self):
         if getattr(self,'gallery_active',False):return
+        try:
+            from scene import signature
+            current_signature=signature(self)
+        except (KeyError,IndexError,RuntimeError,AttributeError,ImportError):
+            current_signature=None
+        if current_signature is not None and current_signature==getattr(self,'_scene_signature',None):
+            self.view.status.paint();return
+        previous_signature=getattr(self,'_scene_signature',None)
+        if current_signature is not None and previous_signature is not None and current_signature[0]==previous_signature[0]:
+            self._render_chats();self.view.status.paint();self._scene_signature=current_signature;return
         self.view.status.paint();self._render_chats();self._render_msgs()
         separator=getattr(self,'sidebar_separator',None)
         if separator:
             separator.erase();separator.attrset(get_color(cyan,-1)|curses.A_DIM)
             for row in range(separator.getmaxyx()[0]):separator.addstr(row,0,'│')
             separator.refresh()
+        self._scene_signature=current_signature
     controllers.Controller._render=render
+    # Coalesce body redraws: a burst of keys/TDLib updates renders the latest
+    # selection once, rather than replaying every intermediate image frame.
+    import threading
+    pending_lock=threading.Lock()
+    def request_render(self):
+        with pending_lock:
+            if getattr(self,'_frame_pending',False):return
+            self._frame_pending=True
+        def draw_latest():
+            self._drawing_frame=True
+            with pending_lock:self._frame_pending=False
+            try:self._render()
+            finally:self._drawing_frame=False
+        self.queue.put(draw_latest)
+    controllers.Controller.render=request_render
+    controllers.Controller.render_msgs=request_render
+    controllers.Controller.render_chats=request_render

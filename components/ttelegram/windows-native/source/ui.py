@@ -26,10 +26,10 @@ def style(s):
     for key,val in {
         'pane-border-status':'top',
         'pane-border-format':border_format(),
-        'status-style':f'bg=#111827,fg={accent}',
+        'status-style':f'bg=default,fg={accent}',
         'pane-border-style':'fg=#334155',
         'pane-active-border-style':f'fg={accent},bold',
-        'message-style':f'bg=#1e293b,fg={accent},bold',
+        'message-style':f'bg=default,fg={accent},bold',
         'status-left':f'#[bold,fg=#3390ec]  ● TELEGRAM #[fg={second}] / {name}  ',
         'status-right':'#[fg=#94a3b8]Ctrl+O НАСТРОЙКИ | Ctrl+L ЧАТЫ | Ctrl+Q ВЫХОД  #[dim,fg=#475569]by user9x21imi#[default] ',
     }.items(): tm('set-option','-t','telegram',key,val)
