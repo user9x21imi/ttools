@@ -13,6 +13,7 @@
   "overlay.py",
   "recovery.py",
   "render_layout.py",
+  "scene.py",
   "restart_client.py",
   "runtime.py",
   "session_control.py",

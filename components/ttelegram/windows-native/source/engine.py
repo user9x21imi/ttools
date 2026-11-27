@@ -427,7 +427,7 @@ def install():
         def still_current():return self.model.current_chat_id==frame_chat and selected_id()==frame_selected and self.view.stdscr.getmaxyx()==frame_size
         with frame(self.view.stdscr,valid=still_current):
             curses.curs_set(0)
-            self.view.stdscr.addstr(0,1,'● TELEGRAM',get_color(33,-1)|bold)
+            self.view.stdscr.addstr(0,1,'● TELEGRAM',get_color(cyan,-1)|bold)
             self.view.stdscr.addstr(0,14,'/ '+('Чаты' if self.view_mode=='chats' else 'Переписка')+' · Ctrl+L чаты · Ctrl+O настройки')
             self.view.stdscr.refresh()
             from panels import draw as draw_panel
