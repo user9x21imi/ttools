@@ -20,3 +20,7 @@ ttools = "ttools.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["ttools*"]
+
+[tool.pytest.ini_options]
+norecursedirs = ["runtime", ".venv"]
+

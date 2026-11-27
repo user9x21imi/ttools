@@ -14,3 +14,6 @@ components/**/wheels/
 *.ovpn
 .env
 components/ttelegram/windows-native/bootstrap/
+tools/capture_curses_output.py
+tools/diagnose_vt_console.py
+tools/test_vt_transparency.py
