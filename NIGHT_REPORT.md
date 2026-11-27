@@ -23,7 +23,7 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 ## Test results (Windows 11, Python 3.14.10, PowerShell 7)
 | Suite | Result |
 |-------|--------|
-| repo root `python -m pytest tests -q` | 73 passed, 12 skipped, 6 subtests passed |
+| repo root `python -m pytest tests -q` | 78 passed, 12 skipped, 6 subtests passed (incl. 5 VT-backend tests) |
 | TVPN `components/tvpn/source/tests` | 13 passed, 5 skipped (POSIX PTY only) |
 | TSpotify `components/tspotify/source/tests` | 397 passed, 2 skipped |
 | TTelegram `components/ttelegram` | 9 passed, 1 skipped |
@@ -33,9 +33,9 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 Installed-package smoke checks: launcher lists 4 supported apps; tthings `--version` = 0.7.2; TSpotify `verify-runtime` JSON ok; TVPN `version`/`status`/`doctor` ok (OpenVPN not connected); TTelegram Windows-native `doctor` ok. Update/rollback/checksum-protection E2E covered by root suites (`test_update_e2e_qa.py`, `test_complete_suite_update.py`, `test_release_gate.py`, `test_distribution.py`).
 
 ## Remote
-- `git push origin integration/windows-preview`: `9724404..08cc137`.
+- `git push origin integration/windows-preview`: `9724404..e397cb2`. Local `72469c1` (VT backend) and `8a0965d` (TTelegram wt.exe alias) plus in-flight cloud-agent fixes still await the final push.
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
-- Cloud VT agent's in-progress files in this worktree were preserved but not committed; branch was restored to `integration/windows-preview` after the agent switched it.
+- Cloud VT agent's work was preserved: `72469c1` (direct VT backend for the launcher) is integrated and verified; `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` is the agent's untracked analysis. The branch was restored to `integration/windows-preview` after the agent switched it; the agent is still editing TTelegram files here.
 
 ## Limitations — manual verification required
 - Actual transparency/Acrylic/image inheritance in Windows Terminal (automated bkgd/ANSI checks are necessary but not sufficient).
@@ -45,5 +45,5 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 
 ## Worktree hygiene
 - All verified commits are local on `integration/windows-preview`, ready to push.
-- Untracked files `ttools/vtbackend.py` and `tools/*vt*/conpty*` diagnostics appeared during the session from another agent's live work in this worktree. They were NOT committed, changed, or deleted; integrate only after that agent reports completion and verification.
+- `ttools/vtbackend.py` and `tests/test_vtbackend.py` from the cloud VT agent are now committed (`72469c1`) and verified. Untracked `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` and in-flight TTelegram modifications are preserved untouched until that agent finishes.
 - No secrets, user DBs, Telegram sessions, VPN credentials, venvs or downloaded binary payloads are staged/committed (runtime/bootstrap/wheels are gitignored).
