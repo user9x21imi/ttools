@@ -1,169 +1,111 @@
-# TSpotify Windows Compatibility - Agent Handoff
+# TTools Integration Handoff
 
-## Base Information
-- **Base SHA**: f29580399e13ffc8cadba38d7f96e1235bfd5a6e
-- **Working Branch**: fix/tspotify-windows-runtime
-- **Worktree**: C:\Users\user\source\repos\ttools-spotify-windows
-- **PR Reference**: #6 (feature/tspotify-artist-discovery-preview)
+**Branch:** `integration/windows-preview`
+**Worktree:** `C:\Users\user\source\repos\ttools-integration`
+**Base Commit:** `1827e6b` (fix(windows): real Windows support for TSpotify, tthings, TVPN, installer + regression tests)
 
-## Current Task
-Fix Windows runtime lock implementation in `components/tspotify/source/src/tspotify/managed.py` to support `msvcrt.locking` for Windows while preserving `fcntl.flock` for POSIX.
+## Completed Work
 
-## Identified Issues
-1. **Runtime Lock**: `runtime_lock()` in `managed.py` raises `RuntimeError("Managed ttools runtime currently supports Linux only")` on Windows (line 32-33)
-2. **Terminal Support**: Need to verify `windows-curses`, PyWinPTY/ConPTY, UTF-8/Unicode handling
-3. **Spotify Engine**: Need to verify Windows engine detection, download, and execution
-4. **Authentication**: Spotify OAuth, browser launch, local callback on Windows
-5. **Integration**: Managed mode with TTools installation prefix and environment variables
+### 1. Main Launcher Fixes
+- **Fixed "Приложения / 00" issue**: Added `_dev_catalog_path()` in `ttools/core.py` to auto-discover `apps.local.json` from source tree when no user sources configured
+- **Fixed terminal transparency**: Removed `self.s.bkgd(' ', curses.color_pair(1))` call in `ttools/__main__.py:colors()` which drew opaque gray background over terminal transparency/acrylic
+- **Added safe default colors**: Wrapped `curses.use_default_colors()` in try/except to handle platforms where it's not supported (Windows PDCurses)
 
-## Previous Work (Seaglass Alpha Free)
-- Added `msvcrt.locking` support for Windows in `runtime_lock()`
-- TSpotify `--demo` successfully launched in Windows PTY
-- Process remained active for 6+ seconds
-- Exit via 'q' completed with code 0
-- Downloaded verified Windows Spotify Player engine 0.25.2
-- Pre-fix tests: 372 passed, 2 skipped
-- Final Windows build not created, real auth/playback not verified
+### 2. Component Discovery
+- Created `apps.local.json` with 5 components pointing to local source directories:
+  - `tspotify` (0.2.0-dev) - Music and your library
+  - `tthings` (0.7.2-dev) - Effects and system tools
+  - `tsoundcloud` (0.1.0-dev) - SoundCloud and track comments (Linux preview)
+  - `tvpn` (1.3.1-dev) - Secure connection
+  - `ttelegram` (2026.11.18.7-win1-dev) - Messages and channels (Windows-native)
+- All components show "готово" (ready) in launcher
 
-## Files to Modify
-- `components/tspotify/source/src/tspotify/managed.py` - Primary fix for runtime_lock()
-- Potentially: `cli.py`, `backend.py`, `terminal.py`, `auth.py`, `paths.py`, `control.py`, `updates.py`
-- Tests: Need to add regression tests for runtime lock (including concurrent process test)
+### 3. Terminal Transparency Contract
+All components now follow the transparency contract:
+- **Launcher** (`ttools/__main__.py`): Removed `bkgd()`, added `use_default_colors()` try/except
+- **TSpotify** (`components/tspotify/source/src/tspotify/ui.py`): Nemotron removed `bkgd()` calls in App and _IntroRenderer
+- **TVPN** (`components/tvpn/source/riseup-panel.py`): Removed `screen.bkgd(' ', curses.color_pair(5))`
+- **TThings**: No `bkgd()` calls found (already compliant)
+- **TTelegram**: No `bkgd()` calls found (Windows-native uses vtcurses stub)
+- **TSoundCloud**: No `bkgd()` calls found (already compliant)
 
-## Completed Steps
-1. ✅ Created worktree at `C:\Users\user\source\repos\ttools-spotify-windows` on branch `fix/tspotify-windows-runtime`
-2. ✅ Verified base commit f295803 matches PR #6
-3. ✅ Examined current `managed.py` implementation
-4. ✅ Reviewed previous test outputs from `%LOCALAPPDATA%\Temp\opencode\`
-5. ✅ Implemented Windows support in `runtime_lock()` using `msvcrt.locking`
-6. ✅ Created and passed regression tests for runtime_lock (basic, concurrent, crash recovery)
-7. ✅ `verify-runtime` command works (exit code 0)
-8. ✅ `doctor` command works (shows Windows diagnostics)
-9. ✅ `--demo` mode works: starts, runs for 5+ seconds, exits cleanly with 'q' (exit code 0)
-10. ✅ Backend tests pass (26 passed, 1 skipped) including Windows engine selection
-11. ✅ Managed mode tests pass (prefix from env, frozen, none, runtime_lock integration)
-12. ✅ All auth, control, updates tests pass
-13. ✅ `git diff --check` clean
-14. ✅ Final commit created: 0a89e67
+### 4. Integrated Component Updates
+Merged from upstream branches:
+- **TSpotify** (`fix/tspotify-windows-runtime`): Windows runtime lock (msvcrt), PR #6 artist discovery, transparency fix, 397 tests pass
+- **TTelegram** (`feature/ttelegram-windows-runtime-ui`): Chat transitions (4 phases), VT initialization, Windows packaging tests
+- **TVPN** (`feature/tvpn-terminal-redesign`): Globe animation, offline panel, terminal capture tests, rollback contract docs
 
-## Final Summary
+### 5. Test Results
+| Component | Platform | Tests | Status |
+|-----------|----------|-------|--------|
+| TSpotify | Windows | 397 passed, 2 skipped | ✅ |
+| TThings | Windows | 60 passed, 7 skipped | ✅ |
+| TTelegram (win-native) | Windows | 6 passed, 1 skipped, 3 failed (missing binary artifacts) | ⚠️ |
+| TVPN (Windows tests) | Windows | 13 passed | ✅ |
+| TTools regression | Windows | 13 passed | ✅ |
+| TSoundCloud | Windows | 13 passed, 3 skipped, 1 failed (path separator) | ⚠️ |
 
-### Branch & Commits
-- **Branch**: `fix/tspotify-windows-runtime`
-- **Commit 1 (Runtime Lock)**: `0a89e67` - "fix(tspotify): add Windows runtime lock support via msvcrt.locking"
-- **Commit 2 (API/UI Compatibility)**: `41e0a66` - "fix(tspotify): restore API and UI compatibility for PR #6 features on Windows"
-- **Commit 3 (Terminal Transparency)**: `7bd063c` - "fix(tspotify): fix terminal transparency on Windows by removing bkgd() calls"
-- **Base SHA**: `f295803` (PR #6: feature/tspotify-artist-discovery-preview)
+Notes:
+- TTelegram failures: Missing `bootstrap/` and `wheels/` directories (not checked in, downloaded at build time)
+- TSoundCloud failure: Path separator issue in test (Windows `\\` vs Linux `/` in JSON), not functional
 
-### Modified Files
-- `components/tspotify/source/src/tspotify/managed.py` - Cross-platform runtime_lock implementation
-- `components/tspotify/source/src/tspotify/ui.py` - Terminal transparency fix (removed bkgd() calls), _IntroRenderer fix
+## Pending / Next Steps
 
-### New Test Files (committed)
-- `components/tspotify/source/tests/test_managed_lock.py` - Runtime lock regression tests
-- `components/tspotify/source/tests/test_managed_mode.py` - Managed mode prefix detection tests
-- `components/tspotify/source/tests/test_demo.py` - Demo mode integration test
-- `components/tspotify/source/tests/test_cli_lock.py` - CLI runtime lock integration test
-- `components/tspotify/source/tests/test_normal_launch.py` - Normal launch regression test
-- `AGENT_HANDOFF.md` - This handoff document
+### 1. TVPN Windows Agent
+Local Strata/Qwen agent is working on TVPN Windows fixes. Do not merge until their work is complete and tested.
 
-### Found Root Causes
-1. **Primary**: `runtime_lock()` in `managed.py` explicitly raised `RuntimeError("Managed ttools runtime currently supports Linux only")` for non-POSIX systems (line 32-33)
-2. **No Windows locking mechanism**: The code only had `fcntl.flock` for POSIX
-3. **API/UI mismatch**: The editable install of `tspotify-terminal` from the main checkout was missing PR #6 changes (artist_profile method, search signature changes, new UI methods)
-4. **Terminal transparency broken**: `bkgd()` calls in `App.__init__` and `_IntroRenderer.__init__` forced a solid background color even with `use_default_colors()`, breaking terminal transparency, Acrylic, background images, and user themes on Windows PDCurses
-5. **_IntroRenderer crash**: Missing `_render_grid` and `_display_grid` attributes caused `AttributeError` on normal launch (without `--demo`)
+### 2. SoundCloud on Windows
+Currently Linux-only preview. Do not present as working Windows component. Keep in dev catalog for testing only.
 
-### Fix Applied
-**Runtime Lock (Commit 1):**
-- Implemented Windows support using `msvcrt.locking`:
-  - Opens lock file in `a+b` mode (creates if needed)
-  - Locks first byte at offset 0 using `msvcrt.LK_NBLCK` (non-blocking)
-  - Releases with `msvcrt.LK_UNLCK` on context exit
-  - Tracks `lock_acquired` flag to avoid double-close/unlock errors
-  - Preserves POSIX `fcntl.flock` implementation unchanged
-  - Lock file persists after release (allows stale lock detection)
+### 3. Cross-Platform Verification
+- Test on Linux (primary platform for TTelegram, TSoundCloud)
+- Test on macOS (TSpotify, TThings source-compatible)
+- Verify terminal transparency works on all platforms (Windows Terminal, Konsole, iTerm2, etc.)
 
-**API/UI Compatibility (Commit 2):**
-- Reinstalled `tspotify-terminal` from the worktree source (which has PR #6 changes)
-- This picked up the missing `artist_profile` method, updated `search(query, category, offset)` signature, and new UI methods
-- All 15 previously failing tests now pass
+### 4. Update System Validation
+- Verify suite update flow: component fix → integration branch → GitHub Actions build → manifest → user auto-update
+- Test rollback with TVPN protected backend
+- Validate checksum verification and atomic state transitions
 
-**Terminal Transparency & Intro Fix (Commit 3):**
-- Removed `bkgd()` calls in `App.__init__` (line 238) and `_IntroRenderer.__init__` (line 2821)
-- These calls forced a background color even with `curses.use_default_colors()` enabled, breaking terminal transparency on Windows PDCurses
-- Now terminal background (transparency, Acrylic, images, themes) shows through correctly
-- Added missing `_render_grid = None` and `_display_grid = None` to `_IntroRenderer.__init__` (fixes AttributeError crash)
-- `_IntroRenderer` now initializes all color pairs needed by `put()` and `symbol_image()`
-- No hardcoded background color escape sequences in window output
+### 5. Release Preparation
+- Do NOT merge to main until:
+  - TVPN Windows agent completes
+  - All components pass cross-platform tests
+  - Full suite update cycle validated
+  - User acceptance testing on clean Windows install
 
-### Test Results (Final)
-- **verify-runtime**: Exit code 0, JSON output with platform detection
-- **doctor**: Shows Windows diagnostics, engine path, data/config dirs
-- **--demo**: Starts in PTY, runs 5+ seconds, exits cleanly with 'q' (exit code 0)
-- **Normal launch (no --demo)**: Starts, shows intro animation with braille graphics, transitions to main UI, exits cleanly with Ctrl+Q (exit code 0)
-- **Full test suite**: 397 passed, 2 skipped (pre-existing worker skip)
-- **Runtime lock tests**: 4/4 passed (basic, no-prefix, concurrent, crash recovery)
-- **Managed mode tests**: 4/4 passed (env, frozen, none, lock integration)
-- **Demo integration test**: 1/1 passed
-- **CLI lock integration tests**: 2/2 passed
-- **Normal launch test**: 1/1 passed
-- **Backend tests**: 26 passed, 1 skipped (including Windows engine selection)
-- **Auth tests**: 12 passed
-- **Control tests**: 6 passed
-- **Updates tests**: 10 passed
-- **API tests**: 8/8 previously failing now pass (artist profile, search, pagination)
-- **UI tests**: 7/7 previously failing now pass (search, artist page, categories)
+## Configuration
 
-### Command to Run Fixed Application
+### Environment Variables
+- `TTOOLS_CATALOG`: Optional override for apps catalog path
+- `TTOOLS_PREFIX`: Optional override for installation prefix
+- `TTOOLS_CHANNEL`: Set to "preview" for preview updates
+- `PYTHONUTF8=1`, `PYTHONIOENCODING=utf-8`: Set by launcher on Windows
+
+### Key Files
+- `apps.local.json`: Development component catalog (auto-discovered)
+- `ttools/core.py`: `_dev_catalog_path()` for source tree detection
+- `ttools/__main__.py`: Launcher UI with transparency support
+- `components/*/app.json`: Component metadata (version, launch args, etc.)
+
+## Known Issues
+1. **TTelegram Windows-native**: Requires Windows Terminal 1.22+ with SIXEL support. Bootstrap Python and wheels not in repo.
+2. **TSoundCloud**: Browser login uses Zen/Chrome profile; Windows path handling in tests needs fix.
+3. **TVPN Windows**: System setup (WireGuard, routing) requires elevated privileges; deferred mode available.
+4. **Terminal transparency**: Requires terminal that supports default background (Windows Terminal, Konsole, etc.). PDCurses on legacy conhost may not support.
+
+## Commands
 ```bash
-# From source (demo mode):
-cd C:\Users\user\source\repos\ttools-spotify-windows\components\tspotify\source
-python -m tspotify --demo
+# Run launcher with dev catalog
+cd C:\Users\user\source\repos\ttools-integration
+python -m ttools --list
 
-# Normal launch (with intro animation):
-python -m tspotify
+# Run component tests
+cd components/tspotify/source && python -m pytest tests/
+cd components/tthings/source && python -m pytest tests/
+cd components/tvpn/source && python -m pytest tests/test_offline_panel.py tests/test_update_lifecycle.py tests/test_windows_installer.py
+cd components/ttelegram/windows-native && python -m pytest tests/test_core.py::Core::test_four_stage_transition_uses_all_states -v
 
-# With managed prefix (simulating TTools installation):
-TSPOTIFY_INSTALL_PREFIX=/path/to/install python -m tspotify --demo
-
-# Verify runtime:
-python -m tspotify verify-runtime
-
-# Show diagnostics:
-python -m tspotify doctor
-
-# Login (requires browser):
-python -m tspotify login
+# Run TTools regression tests
+python -m pytest tests/test_windows_regression.py -v
 ```
-
-### Integration Status
-- **TSPOTIFY_INSTALL_PREFIX**: Verified - TTools suite.py sets this when launching managed TSpotify (line 84)
-- **Managed runtime**: Works correctly with lock file in installation prefix
-- **Engine download**: Windows engine (spotify_player.exe) downloads and verifies correctly
-- **Auth flow**: OAuth URL generates correctly, local callback server starts on port 8989
-- **Terminal transparency**: Verified - no forced background colors, terminal themes/transparency preserved
-
-### Required Integration Changes (Not Applied - Out of Scope)
-1. **Windows package build**: Create Windows installer with bundled Python and engine
-2. **Release workflow**: Add Windows artifacts to release pipeline
-3. **Real auth/playback verification**: Requires user Spotify credentials (not tested in demo mode)
-
-### Next Steps for Windows Release
-1. Merge this branch to main after PR #6 is merged
-2. Add Windows build to CI/CD pipeline (GitHub Actions with Windows runner)
-3. Create Windows installer (NSIS/Inno Setup) with bundled engine
-4. Test real auth flow with Spotify developer credentials
-5. Verify audio playback with Windows audio backend (WASAPI/PulseAudio via TSPOTIFY_SPOTIFY_LOOPBACK)
-
-## Remaining Constraints
-- No changes to TVPN, tthings, Telegram, tsoundcloud, or ttools components
-- No changes to shared installers or release workflows
-- PR #6 UI/UX preserved (artist discovery, new search, discographies)
-- Qwen agent processes not interrupted
-- Do not modify TVPN, tthings, Telegram, tsoundcloud, or ttools components
-- Do not modify shared installers or release workflows
-- Preserve PR #6 UI/UX changes (artist discovery, new search, discographies)
-- Minimize resource usage (Qwen agent using GPU/RAM)
-- No parallel heavy builds or Rust compilation
-- Real auth/playback not required for demo mode verification
