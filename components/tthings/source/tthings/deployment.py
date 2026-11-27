@@ -163,7 +163,7 @@ def read_manifest(location):
 
 def run_argv(path,kind):
     if kind=='zipapp':
-        python=shutil.which('python3') or (sys.executable if not getattr(sys,'frozen',False) else None)
+        python=shutil.which('python3') or shutil.which('python') or (sys.executable if not getattr(sys,'frozen',False) else None)
         if not python:raise RuntimeError('Source fallback требует Python >=3.10')
         return [python,str(path)]
     return [str(path)]
@@ -171,9 +171,13 @@ def run_argv(path,kind):
 
 def probe(path,kind,version):
     args=run_argv(path,kind)
-    result=subprocess.run(args+['--version'],capture_output=True,text=True,check=True,timeout=15)
+    # Children emit UTF-8; never let the host locale (e.g. Windows cp1251/cp866)
+    # decode them, and never let a decode error mask a real failure.
+    result=subprocess.run(args+['--version'],capture_output=True,text=True,check=True,timeout=15,
+                          encoding='utf-8',errors='replace',env=_utf8_env())
     if result.stdout.strip()!=version:raise RuntimeError(f'Версия бинарника {result.stdout.strip()!r} не совпадает с манифестом {version!r}')
-    catalog=json.loads(subprocess.check_output(args+['--list','--json'],text=True,timeout=15))
+    catalog=json.loads(subprocess.check_output(args+['--list','--json'],text=True,timeout=15,
+                                               encoding='utf-8',errors='replace',env=_utf8_env()))
     if not isinstance(catalog,list) or not catalog:raise RuntimeError('Артефакт не вернул каталог')
     return catalog
 
@@ -258,3 +262,8 @@ def install_current(prefix):
         manifest={'schema_version':1,'app_id':APP_ID,'version':__version__,'requires_stop':True,'artifacts':[{'platform':plat,'kind':kind,'url':None,'path':'tthings','sha256':digest(payload)}]}
         atomic_json(base/'update.json',manifest)
         return apply_update(base/'update.json',prefix)
+
+
+def _utf8_env():
+    env=dict(os.environ);env['PYTHONUTF8']='1';env['PYTHONIOENCODING']='utf-8'
+    return env
