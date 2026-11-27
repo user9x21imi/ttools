@@ -37,8 +37,9 @@ the TVPN agent signs off, even though that branch is based on `1827e6b`.
 - Real ConPTY flow: launcher lists `APPLICATIONS / 05`, launches tthings and TSpotify
   `--demo`, both children and launcher quit with **exit 0** and terminal restored.
 - Real bundle: `build_release.py --output dist --platform windows-x86_64` →
-  `install-local.py --allow-partial --defer-system` installs 4 components, prints
-  `unsupported: ["tsoundcloud"]`, exit 0.
+  `install-local.py --defer-system` (no `--allow-partial` needed) installs exactly
+  `['tspotify', 'ttelegram', 'tthings', 'tvpn']`, exit 0. Explicit `--components`
+  still overrides the platform-aware default.
 
 ## Limitations / not verified
 - Real Spotify OAuth login, playback and audio capture need a manual account check.
@@ -53,7 +54,7 @@ the TVPN agent signs off, even though that branch is based on `1827e6b`.
 ```powershell
 irm https://raw.githubusercontent.com/user9x21imi/ttools/main/install.ps1 | iex
 # or from an extracted bundle:
-python .\ttools\install-local.py --allow-partial --defer-system
+python .\ttools\install-local.py --defer-system   # no --allow-partial needed
 # open a NEW terminal (PATH is refreshed), then:
 ttools
 ```
