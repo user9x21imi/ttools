@@ -5,6 +5,20 @@ BUNDLE=Path(__file__).resolve().parent
 sys.path.insert(0,str(BUNDLE/'source'))
 from process_control import default_prefix,lock,running,stop
 
+def find_windows_terminal():
+    """Locate wt.exe, including the per-user app execution alias not on PATH."""
+    found=shutil.which('wt.exe')
+    if found:return found
+    if os.name=='nt':
+        roots=[]
+        local=os.environ.get('LOCALAPPDATA')
+        if local:roots.append(Path(local)/'Microsoft/WindowsApps/wt.exe')
+        program=os.environ.get('ProgramFiles')
+        if program:roots.append(Path(program)/'WindowsApps/wt.exe')
+        for candidate in roots:
+            if candidate.is_file():return str(candidate)
+    return None
+
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def read(path):return json.loads(path.read_text(encoding='utf-8'))
 def write(path,value):
@@ -127,7 +141,7 @@ def main():
             command=[str(root/'runtime/python.exe'),str(root/'source/windows_entry.py'),'--prefix',str(prefix)]+(['--demo'] if args.demo else [])+(['--fast'] if args.fast else [])
             if args.in_terminal:process=subprocess.Popen(command,env=env)
             else:
-                terminal=shutil.which('wt.exe')
+                terminal=find_windows_terminal()
                 if not terminal:raise RuntimeError('Install Windows Terminal 1.22 or later, or launch --in-terminal inside a SIXEL terminal')
                 process=subprocess.Popen([terminal,'new-tab','--title','Telegram','--suppressApplicationTitle',*command],env=env)
             deadline=time.monotonic()+15

@@ -51,4 +51,13 @@ class Core(unittest.TestCase):
         vt._keys.extend('\x1b[A');self.assertEqual(vt._get_key(0),vt.KEY_UP)
         vt._keys.extend('\x1b[<0;20;10M');self.assertEqual(vt._get_key(0),vt.KEY_MOUSE);self.assertEqual(vt.getmouse()[1:3],(19,9))
         vt._keys.extend('\x1b[6;20;10t');self.assertEqual(vt._get_key(0),vt.KEY_RESIZE);self.assertEqual(vt.get_cell_size(),(10,20))
+    def test_find_windows_terminal_prefers_path_then_app_alias(self):
+        with patch.object(manage.shutil,'which',return_value='C:/PATH/wt.exe'):
+            self.assertEqual(manage.find_windows_terminal(),'C:/PATH/wt.exe')
+        with tempfile.TemporaryDirectory(prefix='Telegram тест ') as directory:
+            alias=Path(directory)/'Microsoft/WindowsApps/wt.exe';alias.parent.mkdir(parents=True);alias.write_bytes(b'')
+            with patch.object(manage.shutil,'which',return_value=None),patch.dict(manage.os.environ,{'LOCALAPPDATA':directory}):
+                self.assertEqual(manage.find_windows_terminal(),str(alias))
+        with patch.object(manage.shutil,'which',return_value=None),patch.dict(manage.os.environ,{'LOCALAPPDATA':''}):
+            self.assertIsNone(manage.find_windows_terminal())
 if __name__=='__main__':unittest.main()
