@@ -56,7 +56,6 @@ def project(latitude,longitude,cam_lat,cam_lon,width,height,zoom=1):
     return (px,py) if 0<=px<width and 0<=py<height else None
 
 
-@functools.lru_cache(maxsize=8)
 def render(width,height,latitude,longitude,country,zoom=1,location=None):
     pixels,ids=texture();selected=ids.get(COUNTRIES.get(country,''),-1)
     rx,ry=size(width,height,zoom);phi,theta=map(math.radians,(latitude,longitude))
@@ -97,20 +96,14 @@ def render(width,height,latitude,longitude,country,zoom=1,location=None):
 
 
 class Camera:
-    def __init__(self,reduced_motion=False):
+    def __init__(self):
         self.latitude=18.;self.longitude=-35.;self.zoom=1.
         self.target=None;self.region=None;self.spinning=False;self.box=None
-        self.reduced_motion=bool(reduced_motion)
         self.last=time.monotonic()
 
     def focus(self,latitude,longitude):
-        target=(max(-80,min(80,latitude)),wrap(longitude))
+        self.target=(max(-80,min(80,latitude)),wrap(longitude))
         self.spinning=False
-        if self.reduced_motion:
-            self.latitude,self.longitude=target
-            self.target=None
-        else:
-            self.target=target
 
     def select(self,region,latitude,longitude):
         if self.region!=region:
@@ -120,10 +113,6 @@ class Camera:
     def tick(self,now=None):
         now=time.monotonic() if now is None else now
         dt=max(0,min(.15,now-self.last));self.last=now
-        if self.reduced_motion and self.target:
-            self.latitude,self.longitude=self.target
-            self.target=None
-            return
         if self.spinning:
             self.longitude=wrap(self.longitude+dt*12)
         elif self.target:
@@ -145,7 +134,7 @@ class Camera:
 
     def toggle(self):
         self.target=None
-        self.spinning=False if self.reduced_motion else not self.spinning
+        self.spinning=not self.spinning
 
     def contains(self,x,y):
         return bool(self.box and self.box[0]<=x<self.box[0]+self.box[2] and

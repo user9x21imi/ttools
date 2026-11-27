@@ -54,6 +54,7 @@ install -o root -g root -m 644 "$source_dir/verify_exit.py" "$work/verify_exit.p
 {
     echo '# RiseupVPN: exact commands only; never a user-writable script or arbitrary shell.'
     printf '%s ALL=(root) NOPASSWD: /var/lib/riseup-vpn/backend.sh --text --check\n' "$target_user"
+    printf '%s ALL=(root) NOPASSWD: /var/lib/riseup-vpn/backend.sh --text --guard\n' "$target_user"
     for region in amsterdam paris montreal newyork miami seattle; do
         printf '%s ALL=(root) NOPASSWD: /var/lib/riseup-vpn/backend.sh --text --region %s\n' "$target_user" "$region"
         printf '%s ALL=(root) NOPASSWD: /var/lib/riseup-vpn/backend.sh --text --region %s --events\n' "$target_user" "$region"
