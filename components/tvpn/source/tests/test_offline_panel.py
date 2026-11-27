@@ -26,14 +26,16 @@ class OfflineBackendFixture:
 
 
 class OfflinePanelTests(unittest.TestCase):
-    def test_release_candidate_note_does_not_mislabel_bundled_version(self):
+    def test_bundled_version_matches_manifest_and_release_notes(self):
         version=(SOURCE/'VERSION').read_text(encoding='utf-8').strip()
         manifest=json.loads((SOURCE/'update.json').read_text(encoding='utf-8'))
         notes=(SOURCE/'RELEASE_NOTES.md').read_text(encoding='utf-8')
-        self.assertEqual(version,'1.3.1')
+        self.assertRegex(version,r'^\d+\.\d+\.\d+$')
         self.assertEqual(manifest['version'],version)
-        self.assertIn('# TVPN 1.4.0 — ttools integration candidate (unreleased)',notes)
-        self.assertIn('remains **1.3.1**',notes)
+        self.assertEqual(manifest['app_id'],'tvpn')
+        top=next(line for line in notes.splitlines() if line.strip())
+        self.assertTrue(top.startswith(f'TVPN {version}'),
+                        'RELEASE_NOTES must lead with the section for the bundled version')
 
     def test_region_selection_and_synthetic_catalog_connection(self):
         model=panel.Model('amsterdam',camera=panel.Camera())

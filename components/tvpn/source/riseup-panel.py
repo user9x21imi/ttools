@@ -34,6 +34,28 @@ REGION_KEYS = list(REGIONS)
 REGION_COUNTS = {}
 
 
+def advance_region_selection(choosing, key, counts):
+    """Apply one chooser key without starting or stopping the VPN backend.
+
+    Returns ``(next_choice, requested_region, message)`` so the chooser can be
+    tested with a synthetic gateway catalogue and never needs a live tunnel.
+    """
+    if choosing is None:
+        return None, None, None
+    if key in (curses.KEY_UP, ord('k')):
+        return (choosing-1) % len(REGION_KEYS), None, None
+    if key in (curses.KEY_DOWN, ord('j')):
+        return (choosing+1) % len(REGION_KEYS), None, None
+    if key in (10, 13, curses.KEY_ENTER):
+        region=REGION_KEYS[choosing]
+        if counts.get(region)==0:
+            return choosing, None, 'В актуальном каталоге Riseup нет шлюзов этого региона'
+        return None, region, None
+    if key in (27, ord('r'), ord('R')):
+        return None, None, None
+    return choosing, None, None
+
+
 def art_text(text):
     """Use ordinary ASCII art where Terminal.app cannot render Braille reliably."""
     replacements={'●':'.','↓':'RX','↑':'TX','—':'-','…':'...','·':':','›':'>'}
@@ -167,7 +189,7 @@ def graph(history, index, width):
         for sample in history:
             age = end - sample[0]
             if 0 <= age < 60:
-                bucket = min(count - 1, int((60 - age) / 60 * count))
+                bucket = min(count - 1, max(0, int((60 - age) / 60 * count) - 1))
                 buckets[bucket].append(sample[index])
     values = [max(bucket) if bucket else None for bucket in buckets]
     peak = max((v for v in values if v is not None), default=0)
@@ -231,7 +253,8 @@ def draw(screen, m, journal, ended, choosing=None, update=None):
                 if previous is not None:put(row_number,2+start,segment,previous[0],previous[1])
             put(6+map_height, 2, '@ ' + target['city'] + ' / ' + target['country'] +
                 (' · выход подтверждён' if m.state == 'connected' and preview == m.selected else ' · выбрано'), map_color)
-            put(7+map_height,2,'Arrows: rotate  +/-: zoom  F: focus  Space: spin',5,dim=True)
+            spin_hint='Space reduced' if m.globe.reduced_motion else 'Space spin'
+            put(7+map_height,2,'Arrows: rotate  +/-: zoom  F: focus  '+spin_hint,5,dim=True)
         x, y = (map_width+5, 7) if wide else (2, 6+map_height+2)
         duration = int(time.monotonic() - m.since) if m.since else 0
         timer = f'{duration//3600:02}:{duration//60%60:02}:{duration%60:02}' if m.since else '—'
@@ -290,6 +313,7 @@ def run(script, selected='amsterdam',no_splash=False,no_motion=False,demo=False)
         locale.setlocale(locale.LC_ALL,'')
     except locale.Error:
         pass
+    SESSION_CAMERA.reduced_motion=bool(no_motion or os.environ.get('TVPN_NO_MOTION')=='1')
     m, messages = Model(selected,camera=SESSION_CAMERA), queue.Queue()
     watcher=updater.Watcher(Path(__file__).parent) if not demo and os.environ.get('RISEUP_NO_UPDATE_CHECK')!='1' else None
     initial_offer=watcher.poll() if watcher is not None else None
@@ -346,7 +370,7 @@ def run(script, selected='amsterdam',no_splash=False,no_motion=False,demo=False)
         for i, c in enumerate([curses.COLOR_CYAN, curses.COLOR_GREEN, curses.COLOR_RED,
                                curses.COLOR_YELLOW, curses.COLOR_WHITE, curses.COLOR_BLUE], 1):
             curses.init_pair(i, c, -1)
-        screen.bkgd(' ', curses.color_pair(0))
+        screen.erase()
         screen.timeout(100)
         curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED | getattr(curses,'BUTTON4_PRESSED',0) | getattr(curses,'BUTTON5_PRESSED',0))
         show_intro=not SPLASH_SHOWN and not no_splash and os.environ.get('TVPN_NO_SPLASH')!='1'
@@ -452,25 +476,18 @@ def run(script, selected='amsterdam',no_splash=False,no_motion=False,demo=False)
                 except curses.error:
                     pass
             if choosing is not None:
-                if key in (curses.KEY_UP, ord('k')):
-                    choosing = (choosing-1) % len(REGION_KEYS)
-                elif key in (curses.KEY_DOWN, ord('j')):
-                    choosing = (choosing+1) % len(REGION_KEYS)
-                elif key in (10, 13, curses.KEY_ENTER):
-                    if demo:
-                        m.detail='Демонстрация · переключение VPN отключено'
-                        choosing=None
-                        continue
-                    if m.counts.get(REGION_KEYS[choosing]) == 0:
-                        m.detail = 'В актуальном каталоге Riseup нет шлюзов этого региона'
-                        continue
-                    next_region = REGION_KEYS[choosing]
-                    choosing = None
+                if demo:
+                    m.detail='Демонстрация · переключение VPN отключено'
+                    choosing=None
+                    continue
+                choosing,requested_region,message=advance_region_selection(choosing,key,m.counts)
+                if message:
+                    m.detail=message
+                if requested_region is not None:
+                    next_region=requested_region
                     if not ended:
                         m.detail = 'Восстановление сети перед сменой региона…'
                         request_stop()
-                elif key in (27, ord('r'), ord('R')):
-                    choosing = None
                 continue
             if not journal and m.state!='off':
                 if key==curses.KEY_LEFT:m.globe.pan(0,-12)

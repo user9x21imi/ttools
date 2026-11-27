@@ -1,19 +1,25 @@
 """Run the real curses app in a PTY with the network-free synthetic backend."""
-import fcntl
 import os
 from pathlib import Path
-import pty
 import select
 import signal
 import struct
 import sys
-import termios
 import time
 import unittest
 
+try:
+    import fcntl
+    import termios
+    import pty
+except ImportError:  # Windows has no fcntl/termios/pty; the suite skips below.
+    fcntl = None
+    termios = None
+    pty = None
+
 SOURCE=Path(__file__).resolve().parents[1]
 LAUNCH=SOURCE/'launch.py'
-PTY_SUPPORTED=os.name=='posix' and hasattr(termios,'TIOCSWINSZ')
+PTY_SUPPORTED=os.name=='posix' and termios is not None and hasattr(termios,'TIOCSWINSZ')
 
 
 @unittest.skipUnless(PTY_SUPPORTED,'PTY+curses integration is available on POSIX systems')
