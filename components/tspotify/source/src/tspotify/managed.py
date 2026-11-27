@@ -29,13 +29,46 @@ def runtime_lock():
     if root is None:
         yield
         return
-    if os.name != "posix":
-        raise RuntimeError("Managed ttools runtime currently supports Linux only")
-    import fcntl
 
-    with (root / "run.lock").open("a+b") as stream:
+    lock_path = root / "run.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if os.name == "posix":
+        import fcntl
+
+        with lock_path.open("a+b") as stream:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise RuntimeError("tspotify запущен или обновляется; дождитесь завершения") from None
+            yield
+    else:
+        # Windows: use msvcrt.locking on a single byte at the start of the file.
+        import msvcrt
+
+        # Open in binary mode, create if needed. We keep the handle open for the
+        # duration of the context manager; closing it releases the lock.
+        # Use "a+b" to create the file if it doesn't exist, then seek to 0.
+        stream = lock_path.open("a+b")
+        lock_acquired = False
         try:
-            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("tspotify запущен или обновляется; дождитесь завершения") from None
-        yield
+            # Lock the first byte (non-blocking). On Windows, msvcrt.locking
+            # locks a specific byte range; we use 1 byte at offset 0.
+            stream.seek(0)
+            try:
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+                lock_acquired = True
+            except OSError:
+                # errno 13 (EACCES) or errno 33 (EEXIST) on some Windows versions
+                # indicate the lock is held by another process.
+                raise RuntimeError("tspotify запущен или обновляется; дождитесь завершения") from None
+            yield
+        finally:
+            # Unlock and close. msvcrt.LK_UNLCK releases the lock on the range.
+            if lock_acquired:
+                try:
+                    stream.seek(0)
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                except OSError:
+                    pass
+            stream.close()
