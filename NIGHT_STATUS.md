@@ -23,7 +23,7 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 | TVPN | `fix/tvpn-windows` + `fix/tvpn-windows-runtime` + `c9f10af` | Windows backend pwsh, doctor, splash, demo UI, reduced motion, region helper, graph; offline only | 13 passed, 5 skipped (PTY POSIX-only) |
 | TTelegram | `feature/ttelegram-modernization` MERGED + Windows payload downloaded | installer/doctor OK; real auth not attempted | 9 passed, 1 skipped |
 | tthings | `origin/fix/tthings-windows-runtime` MERGED | VT console modes, UTF-8 subprocesses, gallery preview | 60 passed, 7 skipped, 4870 subtests |
-| TSoundCloud | Linux preview only | NOT in standard Windows install | 13 passed, 3 skipped, 1 known path-separator failure |
+| TSoundCloud | Linux preview only | NOT in standard Windows install | 14 passed, 3 skipped (cross-platform test fixture fixed) |
 
 ## Transparency contract
 - Launcher, TSpotify, TVPN: no `bkgd()`; `use_default_colors()` + pairs with `-1` background.
@@ -37,6 +37,11 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 - Result: `{"installed": "1.1.0-preview.4", "complete": false, "unsupported": []}` — no PATH/registry changes, no VPN privileged setup, no system network changes.
 - Installed launcher list: tspotify, ttelegram, tvpn, tthings (empty "00" catalog regression fixed in installed mode via suite runner setting TTOOLS_CATALOG).
 - Smoke: tthings `--version` 0.7.2; tspotify `verify-runtime` JSON OK; tvpn `version`/`status`/`doctor` OK (OpenVPN present, not connected); ttelegram Windows-native `doctor` OK.
+
+## Remote state
+- Pushed `integration/windows-preview` `9724404..08cc137` to `origin`.
+- Created Draft PR #8: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
+- A cloud VT agent had switched this worktree to `fix/vt-console-mode-transparency` and left `ttools/__main__.py` + `tools/*` diagnostics uncommitted. The branch was safely restored to `integration/windows-preview`, all commits retained, and the agent's uncommitted work preserved untouched.
 
 ## Blockers (need user)
 - Real VPN connect (OpenVPN) — offline/demo checks only at night.

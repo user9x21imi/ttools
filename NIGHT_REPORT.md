@@ -28,9 +28,14 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 | TSpotify `components/tspotify/source/tests` | 397 passed, 2 skipped |
 | TTelegram `components/ttelegram` | 9 passed, 1 skipped |
 | tthings `components/tthings/source/tests` | 60 passed, 7 skipped, 4870 subtests |
-| TSoundCloud `components/tsoundcloud/source/tests` | 13 passed, 3 skipped, 1 known Windows path-separator failure (not in standard Windows install) |
+| TSoundCloud `components/tsoundcloud/source/tests` | 14 passed, 3 skipped (test fixture now uses a real absolute path and parses JSON; TSoundCloud still not in standard Windows install) |
 
 Installed-package smoke checks: launcher lists 4 supported apps; tthings `--version` = 0.7.2; TSpotify `verify-runtime` JSON ok; TVPN `version`/`status`/`doctor` ok (OpenVPN not connected); TTelegram Windows-native `doctor` ok. Update/rollback/checksum-protection E2E covered by root suites (`test_update_e2e_qa.py`, `test_complete_suite_update.py`, `test_release_gate.py`, `test_distribution.py`).
+
+## Remote
+- `git push origin integration/windows-preview`: `9724404..08cc137`.
+- Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
+- Cloud VT agent's in-progress files in this worktree were preserved but not committed; branch was restored to `integration/windows-preview` after the agent switched it.
 
 ## Limitations — manual verification required
 - Actual transparency/Acrylic/image inheritance in Windows Terminal (automated bkgd/ANSI checks are necessary but not sufficient).

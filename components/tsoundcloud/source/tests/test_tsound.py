@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import select
@@ -277,33 +278,34 @@ class WebSessionTest(unittest.TestCase):
 
         from tsound.web_service import WebSoundCloud
 
-        profile = Path("/tmp/test-zen-profile")
         with (tempfile.TemporaryDirectory() as temp,
               patch.dict(os.environ, {"TSOUND_HOME": temp}),
               patch("tsound.web_service.browser_profile", return_value=([], None)),
-              patch("tsound.web_service.default_profile", return_value=profile),
-              patch("tsound.web_service.session_token", side_effect=lambda target: "test" if target == profile else None),
               patch("tsound.web_service.web_client_id", return_value="test-web-id"),
               patch("tsound.web_service.request", return_value={"id": 123}),
               patch("tsound.web_service.open_default_browser") as launch):
-            service = WebSoundCloud(SoundCloud())
-            self.assertFalse(service.signed_in)
-            service.default_browser_login(Event())
-            self.assertEqual(service.account_id(), "123")
-            launch.assert_not_called()
-            saved = (Path(temp) / "web-login.json").read_text(encoding="utf-8")
-            self.assertIn(str(profile), saved)
-            self.assertNotIn('"token"', saved)
-            restarted = WebSoundCloud(SoundCloud())
-            self.assertTrue(restarted.signed_in)
-            self.assertEqual(restarted.account_id(), "123")
-            app = App(None, restarted)
-            try:
-                self.assertFalse(app.login)
-            finally:
-                for pool in app.pools.values():
-                    pool.shutdown(wait=True, cancel_futures=True)
-            launch.assert_not_called()
+            # Use a real absolute path: a POSIX "/tmp/..." string is not absolute on Windows.
+            profile = Path(temp)/"test-zen-profile"
+            with (patch("tsound.web_service.default_profile", return_value=profile),
+                  patch("tsound.web_service.session_token", side_effect=lambda target: "test" if target == profile else None)):
+                service = WebSoundCloud(SoundCloud())
+                self.assertFalse(service.signed_in)
+                service.default_browser_login(Event())
+                self.assertEqual(service.account_id(), "123")
+                launch.assert_not_called()
+                saved = json.loads((Path(temp) / "web-login.json").read_text(encoding="utf-8"))
+                self.assertEqual(saved["profile"], str(profile))
+                self.assertNotIn('token', saved)
+                restarted = WebSoundCloud(SoundCloud())
+                self.assertTrue(restarted.signed_in)
+                self.assertEqual(restarted.account_id(), "123")
+                app = App(None, restarted)
+                try:
+                    self.assertFalse(app.login)
+                finally:
+                    for pool in app.pools.values():
+                        pool.shutdown(wait=True, cancel_futures=True)
+                launch.assert_not_called()
 
     def test_read_session_while_browser_holds_exclusive_lock(self):
         import sqlite3
