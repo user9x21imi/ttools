@@ -23,7 +23,7 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 ## Test results (Windows 11, Python 3.14.10, PowerShell 7)
 | Suite | Result |
 |-------|--------|
-| repo root `python -m pytest tests -q` | 78 passed, 12 skipped, 6 subtests passed (incl. 5 VT-backend tests) |
+| repo root `python -m pytest tests -q` | 79 passed, 12 skipped, 6 subtests passed (incl. 6 VT-backend tests) |
 | TVPN `components/tvpn/source/tests` | 13 passed, 5 skipped (POSIX PTY only) |
 | TSpotify `components/tspotify/source/tests` | 397 passed, 2 skipped |
 | TTelegram `components/ttelegram` | 9 passed, 1 skipped |
@@ -32,10 +32,20 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 
 Installed-package smoke checks: launcher lists 4 supported apps; tthings `--version` = 0.7.2; TSpotify `verify-runtime` JSON ok; TVPN `version`/`status`/`doctor` ok (OpenVPN not connected); TTelegram Windows-native `doctor` ok. Update/rollback/checksum-protection E2E covered by root suites (`test_update_e2e_qa.py`, `test_complete_suite_update.py`, `test_release_gate.py`, `test_distribution.py`).
 
+## Final integration work (lead, 2026-11-28)
+- Cherry-picked `8a0965d` (Windows Terminal app-alias discovery) and integrated the second cloud agent's TTelegram fixes: actionable error when `current.json` is missing, on-demand install for dev bundle prefixes, corrected `ttelegram.cmd` trampoline argv (`"%~dp0."`), plus regression tests. Payload `files.json` and `components/checksums.json` refreshed; all 12 TTelegram tests pass (1 skipped).
+- Extended transparency fix beyond the launcher: new `_vt` shims in TSpotify (`src/tspotify/_vt.py`, selected in `cli.py`) and TVPN (`source/_vt.py`, selected in `riseup-panel.py`) load `ttools.vtbackend` on Windows when a console is available, otherwise fall back to stdlib curses. POSIX and headless test runs are unaffected.
+- Final commit `67416f4 fix(windows): preserve terminal transparency in TSpotify/TVPN and harden TTelegram launch` (11 files) includes the diagnosis report `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md`.
+- Final test results: root suite **79 passed, 12 skipped, 6 subtests**; TSpotify **397 passed, 2 skipped**; TVPN **13 passed, 5 skipped**; TTelegram **12 passed, 1 skipped**; tthings **60 passed, 7 skipped**; TSoundCloud **14 passed, 3 skipped**.
+
+## Release build / one-command install (validated)
+- Fresh release build from `72469c1`: `python tools/build_release.py --output C:\temp\ttg-night-release --platform windows-x86_64` → `ttools-windows-x86_64.zip` (94,158,950 bytes, `complete=False` because Windows Telegram payload is not yet published in a GitHub Release).
+- Extracted ZIP to `C:\temp\ttg-night-unpacked\ttools`; ran `cmd /c "Install-ttools.cmd -Prefix C:\temp\ttg-one-cmd-test -Components tthings"` with `TTOOLS_INSTALLER_NO_PAUSE=1` → **exit 0**, installed tthings 0.7.2 into `1.1.0-preview.4`, no manual steps. One-command install validated end-to-end.
+
 ## Remote
-- `git push origin integration/windows-preview`: `9724404..e397cb2`. Local `72469c1` (VT backend) and `8a0965d` (TTelegram wt.exe alias) plus in-flight cloud-agent fixes still await the final push.
+- `git push origin integration/windows-preview`: `9724404..e397cb2`. Local pending commits awaiting final push: `72469c1` (VT backend), `8a0965d` (TTelegram wt.exe alias), `364baf7`/`e397cb2` docs, `67416f4` (final integration).
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
-- Cloud VT agent's work was preserved: `72469c1` (direct VT backend for the launcher) is integrated and verified; `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` is the agent's untracked analysis. The branch was restored to `integration/windows-preview` after the agent switched it; the agent is still editing TTelegram files here.
+- All cloud-agent artifacts are now committed and verified; no in-flight TTelegram edits remain in this worktree.
 
 ## Limitations — manual verification required
 - Actual transparency/Acrylic/image inheritance in Windows Terminal (automated bkgd/ANSI checks are necessary but not sufficient).
@@ -45,5 +55,5 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 
 ## Worktree hygiene
 - All verified commits are local on `integration/windows-preview`, ready to push.
-- `ttools/vtbackend.py` and `tests/test_vtbackend.py` from the cloud VT agent are now committed (`72469c1`) and verified. Untracked `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` and in-flight TTelegram modifications are preserved untouched until that agent finishes.
+- `ttools/vtbackend.py`, `tests/test_vtbackend.py`, `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` and all TTelegram launch fixes are committed and verified. Worktree is clean apart from this report update; no untracked diagnostics are staged.
 - No secrets, user DBs, Telegram sessions, VPN credentials, venvs or downloaded binary payloads are staged/committed (runtime/bootstrap/wheels are gitignored).
