@@ -1,0 +1,4 @@
+Offline demo rendering · 120×40 terminal · 40 frames
+mean render: 2.43 ms
+p95 render: 2.50 ms
+max render: 2.74 ms

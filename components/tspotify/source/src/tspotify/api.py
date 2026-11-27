@@ -846,6 +846,11 @@ class Spotify:
 
     def discover(self, section):
         """Read real Spotify data lazily; never substitute invented recommendations."""
+        if section == "Новые релизы":
+            raise SpotifyError(
+                "Spotify удалил каталог новых релизов из Web API для Dev Mode. "
+                "Найдите релиз через поиск Spotify."
+            )
         names = {
             "Недавние": "recent",
             "Ваши миксы": "mixes",
@@ -902,13 +907,6 @@ class Spotify:
                     )
                     if (daily if section == "Миксы дня" else mixed) and spotify:
                         result.append((kind, item))
-            elif section == "Новые релизы":
-                data = self.request("GET", "browse/new-releases?limit=50") or {}
-                result = [
-                    ("album", item)
-                    for item in (data.get("albums") or {}).get("items", [])
-                    if item and item.get("id")
-                ]
             elif section == "Рекомендации":
                 top = self.request("GET", "me/top/tracks?limit=5&time_range=short_term") or {}
                 seeds = ",".join(item["id"] for item in top.get("items", []) if item and item.get("id"))
@@ -944,18 +942,14 @@ class Spotify:
         except (OSError, ValueError):
             pass
         if kind == "playlist":
-            page = self.request("GET", f"playlists/{item_id}/tracks?limit=100")
+            page = self.request("GET", f"playlists/{item_id}/items?limit=50")
         elif kind == "album":
             page = self.request("GET", f"albums/{item_id}/tracks?limit=50")
         elif kind == "artist":
-            data = self.request("GET", f"artists/{item_id}/top-tracks")
-            value = {
-                "name": name,
-                "tracks": data.get("tracks", []),
-                "context_uri": f"spotify:artist:{item_id}",
-            }
-            paths.private_json(target, value)
-            return value
+            raise SpotifyError(
+                "Рейтинг популярных треков артиста удалён из Spotify Web API. "
+                "Откройте страницу артиста, чтобы просмотреть каталог релизов."
+            )
         else:
             raise SpotifyError("Этот раздел пока не поддерживает список треков")
         tracks = []
@@ -969,6 +963,78 @@ class Spotify:
         paths.private_json(target, value)
         return value
 
-    def search(self, query):
-        data = self.request("GET", "search?q=" + quote(query) + "&type=track,album,artist,playlist&limit=10")
-        return {key: value.get("items", []) for key, value in data.items() if isinstance(value, dict)}
+    def artist_profile(self, item_id, name=""):
+        target = paths.CACHE / f"artist-profile-{item_id}.json"
+        try:
+            if target.exists() and time.time() - target.stat().st_mtime < 3600:
+                value = json.loads(target.read_text(encoding="utf-8"))
+                if isinstance(value, dict) and isinstance(value.get("artist"), dict):
+                    return value
+        except (OSError, ValueError):
+            pass
+
+        identity = quote(item_id, safe="")
+        artist = self.request("GET", f"artists/{identity}") or {}
+        if not artist.get("id"):
+            artist = {"id": item_id, "name": name or "Artist", "images": []}
+        releases = {"album": [], "single": [], "appears_on": [], "compilation": []}
+        unavailable_groups = {}
+        for group in releases:
+            try:
+                page = self.request(
+                    "GET", f"artists/{identity}/albums?include_groups={group}&limit=10"
+                ) or {}
+                seen = set()
+                while page:
+                    for release in page.get("items", []):
+                        if not isinstance(release, dict) or not release.get("id") or release["id"] in seen:
+                            continue
+                        seen.add(release["id"])
+                        release.setdefault("_artist_group", group)
+                        releases[group].append(release)
+                    page = self.request("GET", page["next"]) if page.get("next") else None
+            except SpotifyError as error:
+                if error.status not in (403, 404):
+                    raise
+                unavailable_groups[group] = error.status
+
+        value = {
+            "artist": artist,
+            "releases": releases,
+            "unavailable_groups": unavailable_groups,
+            "context_uri": f"spotify:artist:{item_id}",
+            "catalog_label": "Доступный каталог релизов",
+        }
+        paths.private_json(target, value)
+        return value
+
+    def search(self, query, category="all", offset=0):
+        type_map = {
+            "all": "track,artist,album,playlist",
+            "track": "track",
+            "artist": "artist",
+            "album": "album",
+            "playlist": "playlist",
+        }
+        if category not in type_map:
+            raise SpotifyError("Неизвестная категория поиска")
+        offset = max(0, int(offset))
+        data = self.request(
+            "GET",
+            "search?q=" + quote(query) + "&type=" + type_map[category] + f"&limit=10&offset={offset}",
+        )
+        names = {"tracks": "track", "artists": "artist", "albums": "album", "playlists": "playlist"}
+        results = {}
+        paging = {}
+        for plural, singular in names.items():
+            page = data.get(plural)
+            if not isinstance(page, dict):
+                continue
+            results[plural] = page.get("items", [])
+            paging[singular] = {
+                "offset": page.get("offset", offset),
+                "total": page.get("total", len(results[plural])),
+                "next": page.get("next"),
+            }
+        results["_paging"] = paging
+        return results

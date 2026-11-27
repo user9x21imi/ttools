@@ -81,6 +81,10 @@ def open_context(kind, item_id, name):
     return API.context(kind, item_id, name)
 
 
+def open_artist(item_id, name):
+    return API.artist_profile(item_id, name)
+
+
 class App:
     def __init__(self, screen):
         self.s = screen
@@ -130,6 +134,11 @@ class App:
         self.query = ""
         self.search_due = 0.0
         self.search_cache = OrderedDict()
+        self.search_query = ""
+        self.search_category = "all"
+        self.search_results = {"track": [], "artist": [], "album": [], "playlist": []}
+        self.search_offsets = {"all": 0, "track": 0, "artist": 0, "album": 0, "playlist": 0}
+        self.search_paging = {}
         self.search_scope = "spotify"
         self.global_query = ""
         self.context_query = ""
@@ -202,6 +211,8 @@ class App:
         self.colors = {}
         self.next_color = 20
         self.history = []
+        self.artist_profile = None
+        self.artist_group = "album"
         self.search_y = 2
         self.default_background = -1
         try:
@@ -224,7 +235,9 @@ class App:
             (12, 78, 236),
         ]:
             self.init_pair(i, fg, bg)
-        self.s.bkgd(" ", curses.color_pair(1) if curses.has_colors() else 0)
+        # Don't call bkgd() - it forces a background color even with use_default_colors()
+        # and breaks terminal transparency on Windows PDCurses.
+        # Let the terminal handle background (transparency, Acrylic, images, themes).
         self.s.timeout(16)
         self.s.keypad(True)
         curses.curs_set(0)
@@ -260,6 +273,119 @@ class App:
             max(0, min(index, len(self.items) - 1)),
         )
         self.restore_selection = None
+
+    def push_history(self, section=None, items=None, selected=None):
+        section = self.section if section is None else section
+        items = self.items if items is None else items
+        selected = self.selected if selected is None else selected
+        view = {
+            "artist_profile": self.artist_profile,
+            "artist_group": self.artist_group,
+            "query": self.query,
+            "search_scope": self.search_scope,
+            "context_items": self.context_items,
+            "context_section": self.context_section,
+            "context_kind": self.context_kind,
+            "context_query": self.context_query,
+            "search_layout": self.search_layout,
+            "search_suspended": self.search_suspended,
+            "search_query": self.search_query,
+            "search_category": self.search_category,
+            "search_results": {key: list(items) for key, items in self.search_results.items()},
+            "search_offsets": dict(self.search_offsets),
+            "search_paging": dict(self.search_paging),
+        }
+        self.history.append((section, list(items), selected, view))
+
+    def artist_items(self, profile, group):
+        releases = profile.get("releases", {})
+        if group != "all":
+            return [("album", item) for item in releases.get(group, [])]
+        items = []
+        seen = set()
+        for name in ("album", "single", "appears_on", "compilation"):
+            for item in releases.get(name, []):
+                if item.get("id") not in seen:
+                    seen.add(item.get("id"))
+                    items.append(("album", item))
+        items.sort(key=lambda pair: pair[1].get("release_date", ""), reverse=True)
+        return items
+
+    def select_artist_group(self, group):
+        if group not in ("album", "single", "appears_on", "all") or not self.artist_profile:
+            return
+        selected_id = self.items[self.selected][1].get("id") if self.items else None
+        self.artist_group = group
+        self.items = self.artist_items(self.artist_profile, group)
+        self.selected = next(
+            (index for index, (_, item) in enumerate(self.items) if item.get("id") == selected_id), 0
+        )
+
+    def select_search_category(self, category):
+        if category not in ("all", "track", "artist", "album", "playlist"):
+            return
+        self.search_category = category
+        self.selected = 0
+        self.update_search_items()
+
+    def update_search_items(self):
+        names = ("track", "artist", "album", "playlist")
+        if self.search_category == "all":
+            self.items = [
+                (kind, item)
+                for kind in names
+                for item in self.search_results.get(kind, [])
+            ]
+        else:
+            kind = self.search_category
+            self.items = [(kind, item) for item in self.search_results.get(kind, [])]
+        self.selected = max(0, min(self.selected, len(self.items) - 1)) if self.items else 0
+
+    def load_more_search(self):
+        if "search" in self.pending:
+            self.notice = "Поиск ещё загружается…"
+            return
+        category = self.search_category
+        available = any(
+            self.search_paging.get(kind, {}).get("next")
+            for kind in ("track", "artist", "album", "playlist")
+        ) if category == "all" else self.search_paging.get(category, {}).get("next")
+        if not available:
+            self.notice = "Больше результатов нет"
+            return
+        self.search_offsets[category] = self.search_offsets.get(category, 0) + 10
+        self.dispatch_search(category=category, offset=self.search_offsets[category])
+
+    def go_back(self):
+        if not self.history:
+            return False
+        self.begin_panel_transition()
+        entry = self.history.pop()
+        self.section, self.items, self.selected = entry[:3]
+        view = entry[3] if len(entry) > 3 else None
+        if view:
+            for key in (
+                "artist_profile", "artist_group", "query", "search_scope", "context_items",
+                "context_section", "context_kind", "context_query", "search_layout",
+                "search_suspended", "search_query", "search_category", "search_results",
+                "search_offsets", "search_paging",
+            ):
+                if key in view:
+                    setattr(self, key, view[key])
+        else:
+            self.artist_profile = None
+            uri = (self.items[0][1].get("_context_uri") or "") if self.items else ""
+            if uri and not self.section.startswith("Поиск:") and all(kind == "track" for kind, _ in self.items):
+                self.context_items = list(self.items)
+                self.context_section = self.section
+                self.context_kind = uri.split(":")[1] if uri.count(":") >= 2 else "список"
+                self.context_query = ""
+                self.set_search_scope("context")
+                self.query = ""
+            else:
+                self.context_items = None
+                self.set_search_scope("spotify")
+        return True
 
     def checkpoint(self):
         if DEMO_MODE or not hasattr(API, "save_session"):
@@ -571,54 +697,102 @@ class App:
                     value.get("_query", self.query.strip()) if isinstance(value, dict) else self.query.strip()
                 )
                 result = value.get("_results", value) if isinstance(value, dict) else value
-                self.search_cache[requested] = (time.monotonic(), result)
-                while len(self.search_cache) > 24:
-                    self.search_cache.popitem(last=False)
+                category = value.get("_category", "all") if isinstance(value, dict) else "all"
+                offset = value.get("_offset", 0) if isinstance(value, dict) else 0
+                selected_id = (
+                    self.items[self.selected][1].get("id")
+                    if self.section == "Поиск: " + requested and self.items and self.selected < len(self.items)
+                    else None
+                )
+                if category == "all" and offset == 0:
+                    self.search_cache[requested] = (time.monotonic(), result)
+                    while len(self.search_cache) > 24:
+                        self.search_cache.popitem(last=False)
                 if self.search_suspended or self.search_scope == "context":
                     continue
                 if requested != self.query.strip():
                     self.search_due = max(self.search_due, time.monotonic())
                     continue
-                value = result
-                old_items = self.items if self.section == "Поиск: " + self.query else []
-                selected_id = (
-                    old_items[self.selected][1].get("id")
-                    if old_items and self.selected < len(old_items)
-                    else None
-                )
+                if self.search_query != requested:
+                    previous_items = self.items if self.section == "Поиск: " + requested else []
+                    self.search_query = requested
+                    self.search_results = {"track": [], "artist": [], "album": [], "playlist": []}
+                    self.search_offsets = {"all": 0, "track": 0, "artist": 0, "album": 0, "playlist": 0}
+                    self.search_paging = {}
+                    for kind, item in previous_items:
+                        self.search_results.setdefault(kind, []).append(item)
                 self.section = "Поиск: " + self.query
-                self.items = list(old_items)
-                seen = {(kind, item.get("id")) for kind, item in self.items}
-                indexes = {(kind, item.get("id")): i for i, (kind, item) in enumerate(self.items)}
-                for kind, name in [
-                    ("track", "tracks"),
-                    ("album", "albums"),
-                    ("artist", "artists"),
-                    ("playlist", "playlists"),
-                ]:
-                    for item in (value or {}).get(name, []):
+                plural = {"track": "tracks", "artist": "artists", "album": "albums", "playlist": "playlists"}
+                paging = result.get("_paging", {}) if isinstance(result, dict) else {}
+                for kind, key_name in plural.items():
+                    values = (result or {}).get(key_name, [])
+                    if not isinstance(values, list):
+                        continue
+                    existing = {item.get("id"): index for index, item in enumerate(self.search_results[kind])}
+                    for item in values:
                         if not item:
                             continue
-                        identity = (kind, item.get("id"))
-                        if identity in indexes:
-                            index = indexes[identity]
-                            self.items[index] = (kind, {**self.items[index][1], **item})
-                        elif identity not in seen:
-                            indexes[identity] = len(self.items)
-                            self.items.append((kind, item))
-                            seen.add(identity)
+                        if item.get("id") in existing:
+                            index = existing[item["id"]]
+                            self.search_results[kind][index] = {
+                                **self.search_results[kind][index],
+                                **item,
+                            }
+                        else:
+                            existing[item.get("id")] = len(self.search_results[kind])
+                            self.search_results[kind].append(item)
+                    if kind in paging:
+                        self.search_paging[kind] = paging[kind]
+                    for item in values:
+                        if not item:
+                            continue
                         thumb_key = kind + ":" + item.get("id", "")
                         if self.thumbnails.get(thumb_key) == [] and (
                             item.get("images") or (item.get("album") or {}).get("images")
                         ):
                             self.thumbnails.pop(thumb_key, None)
-                self.selected = next(
-                    (i for i, (_, item) in enumerate(self.items) if item.get("id") == selected_id), 0
-                )
+                self.update_search_items()
+                if selected_id:
+                    self.selected = next(
+                        (i for i, (_, item) in enumerate(self.items) if item.get("id") == selected_id),
+                        self.selected,
+                    )
                 self.restore_selected_row()
-                self.notice = f"Найдено: {len(self.items)} · Enter — слушать"
+                if offset == 0:
+                    self.search_offsets[category] = 0
+                self.notice = f"Найдено: {len(self.items)} · Enter открыть · N ещё"
+            elif key == "artist":
+                profile = value or {}
+                artist = profile.get("artist") or {}
+                self.begin_panel_transition()
+                previous_items = (
+                    self.context_items
+                    if self.search_scope == "context" and self.context_items is not None
+                    else self.items
+                )
+                previous_id = self.items[self.selected][1].get("id") if self.items else None
+                previous_selected = next(
+                    (i for i, (_, item) in enumerate(previous_items) if item.get("id") == previous_id), 0
+                )
+                self.push_history(self.section, previous_items, previous_selected)
+                self.artist_profile = profile
+                self.artist_group = "album"
+                if not profile.get("releases", {}).get("album"):
+                    self.artist_group = "single"
+                self.section = "ARTIST / " + artist.get("name", "Artist")
+                self.items = self.artist_items(profile, self.artist_group)
+                self.selected = 0
+                self.context_items = None
+                self.set_search_scope("spotify")
+                self.query = ""
+                self.search_suspended = True
+                self.search_layout = False
+                self.editing = False
+                self.search_due = 0
+                self.notice = f"Каталог: {sum(len(items) for items in profile.get('releases', {}).values())} релизов"
             elif key == "open":
                 data = value or {}
+                self.begin_panel_transition()
                 if "Playlist" in data or "Album" in data:
                     data = data.get("Playlist", data.get("Album"))
                 tracks = data.get("tracks", [])
@@ -633,8 +807,9 @@ class App:
                 previous_selected = next(
                     (i for i, (_, item) in enumerate(previous_items) if item.get("id") == previous_id), 0
                 )
-                self.history.append((self.section, previous_items, previous_selected))
+                self.push_history(self.section, previous_items, previous_selected)
                 self.section = (data.get("playlist") or data.get("album") or data).get("name", "Треки")
+                self.artist_profile = None
                 for track in tracks:
                     if isinstance(track, dict):
                         target = track["track"] if isinstance(track.get("track"), dict) else track
@@ -1129,6 +1304,8 @@ class App:
             self.put(title_y + 1 + line, x, text, 1, True, width=content_w)
         info_y = title_y + 3
         self.put(info_y, x, artists(item) or "Spotify", 2, width=content_w)
+        if (item.get("artists") or [{}])[0].get("id"):
+            self.hit(info_y, x, 1, content_w, "key", "g")
         self.put(info_y + 1, x, (item.get("album") or {}).get("name", ""), 4, width=content_w)
         status = (
             "◌ LOADING"
@@ -1270,13 +1447,26 @@ class App:
             self.s.refresh()
             return
 
+        if self.artist_profile and not self.search_layout:
+            footer_y = h - 4
+            self.render_artist_profile(2, w, max(1, footer_y - 2))
+            self.render_footer(h, w)
+            if self.help:
+                self.render_help(h, w)
+            if self.share_dialog:
+                self.render_share(h, w)
+            curses.curs_set(0)
+            self._finish_render()
+            self.s.refresh()
+            return
+
         footer_y = h - 4
         body_y = 2
         body_h = max(1, footer_y - body_y)
         wide = h >= 30 and w >= 110 and w >= 2 * h and not self.search_layout
         if self.search_layout:
-            self.render_search(2, w, 2)
-            content_y = 5
+            self.render_search(2, w, 3)
+            content_y = 6
             content_h = max(4, footer_y - content_y - 1)
             if wide:
                 library_w = max(44, int(w * 0.58))
@@ -1350,12 +1540,134 @@ class App:
         if height <= 1:
             return
         self.search_y = y + 1
-        hint = "Type a track, artist or album" if not context else "Search in this playlist"
+        hint = "Type a track, artist, album or playlist" if not context else "Search in this playlist"
         self.put(y + 1, 3, "⌕  " + (self.query or hint), 1 if self.editing else 4, width=w - 6)
         if height > 2:
-            self.put(y + 2, 3, "Enter search · Tab focus · Esc return", 4, width=w - 6)
+            labels = [
+                ("all", "ALL 0"),
+                ("track", "TRACKS 1"),
+                ("artist", "ARTISTS 2"),
+                ("album", "ALBUMS 3"),
+                ("playlist", "PLAYLISTS 4"),
+            ]
+            x = 3
+            for category, label in labels:
+                self.put(y + 2, x, label, 2 if self.search_category == category else 4, self.search_category == category)
+                self.hit(y + 2, x, 1, text_width(label), "key", "search-category:" + category)
+                x += text_width(label) + 2
+            has_more = (
+                any(self.search_paging.get(kind, {}).get("next") for kind in ("track", "artist", "album", "playlist"))
+                if self.search_category == "all"
+                else bool(self.search_paging.get(self.search_category, {}).get("next"))
+            )
+            more_label = "N MORE" if has_more else "END"
+            more_x = min(w - text_width(more_label) - 2, x + 1)
+            self.put(y + 2, more_x, more_label, 3 if has_more else 4, width=max(1, w - more_x - 2))
+            if has_more:
+                self.hit(y + 2, more_x, 1, text_width(more_label), "key", "n")
         if context:
             self.button(y, w - 14, "F2 ALL", curses.KEY_F2)
+
+    def render_artist_profile(self, y, w, height):
+        profile = self.artist_profile or {}
+        artist = profile.get("artist") or {}
+        name = artist.get("name", "Artist")
+        self.hit(y, 1, height, w - 2, "panel", "artist")
+        self.put(y, 3, "ARTIST / PROFILE", 2, True)
+        if w >= 70:
+            self.button(y, w - 25, "y LINK", "y")
+            self.button(y, w - 13, "BACK", curses.KEY_LEFT)
+        image_w = min(18, max(10, w // 7))
+        image_h = min(8, max(4, image_w // 2))
+        image_y = y + 1
+        image_x = 3
+        key = "artist:" + str(artist.get("id", ""))
+        image = self.thumbnails.get(key)
+        if image:
+            self.dot_image(image, image_y, image_x, image_w, image_h)
+        else:
+            self.put(image_y, image_x, "·" * image_w, 3)
+            if key not in self.thumbnails and sum(p.startswith("thumb:") for p in self.pending) < 4:
+                self.submit("thumb:" + key, self.load_thumbnail, "artist", artist)
+        text_x = image_x + image_w + 3
+        text_w = max(8, w - text_x - 5)
+        self.put(image_y, text_x, name, 1, True, width=text_w)
+        genres = artist.get("genres") or []
+        metadata = " · ".join(genres[:3]) if genres else "SPOTIFY CATALOG"
+        self.put(image_y + 1, text_x, metadata, 4, width=text_w)
+        details = []
+        if isinstance(artist.get("followers"), dict) and artist["followers"].get("total") is not None:
+            details.append(f"{artist['followers']['total']:,} followers")
+        if artist.get("popularity") is not None:
+            details.append(f"popularity {artist['popularity']}")
+        if details:
+            self.put(image_y + 2, text_x, " · ".join(details), 4, width=text_w)
+        else:
+            self.put(image_y + 2, text_x, "Доступные метаданные Spotify", 4, width=text_w)
+        self.put(image_y + 3, text_x, "Топ треков недоступен · показан каталог релизов", 3, width=text_w)
+
+        tabs_y = image_y + image_h + 1
+        tabs = [
+            ("album", "1 ALBUMS"),
+            ("single", "2 SINGLES + EP"),
+            ("appears_on", "3 APPEARS ON"),
+            ("all", "4 ALL RELEASES"),
+        ]
+        tx = 3
+        for group, label in tabs:
+            if tx + text_width(label) >= w - 2:
+                break
+            selected = self.artist_group == group
+            self.put(tabs_y, tx, label, 2 if selected else 4, selected)
+            self.hit(tabs_y, tx, 1, text_width(label), "key", "artist-group:" + group)
+            tx += text_width(label) + 2
+        count = len(self.items)
+        partial = ""
+        if self.artist_group == "all" and profile.get("unavailable_groups"):
+            partial = " · недоступно: " + ", ".join(profile["unavailable_groups"])
+        self.put(
+            tabs_y + 1,
+            3,
+            f"{profile.get('catalog_label', 'Доступный каталог')} · {count} релизов{partial}",
+            4,
+            width=w - 6,
+        )
+        list_y = tabs_y + 2
+        rows = max(1, (y + height - list_y) // 2)
+        start = max(0, min(self.selected - rows + 1, len(self.items) - rows))
+        self.list_area = (list_y, rows)
+        for row, (_, release) in enumerate(self.items[start : start + rows]):
+            index = start + row
+            yy = list_y + row * 2
+            selected = index == self.selected
+            self.hit(yy, 3, 2, w - 6, "row", index)
+            if selected:
+                self.put(yy, 3, " " * max(1, w - 6), 6)
+                self.put(yy + 1, 3, " " * max(1, w - 6), 6)
+            art_key = "album:" + str(release.get("id", ""))
+            art = self.thumbnails.get(art_key)
+            if art:
+                self.dot_image(art, yy, 5, 4, 2)
+            elif art_key not in self.thumbnails and sum(p.startswith("thumb:") for p in self.pending) < 4:
+                self.submit("thumb:" + art_key, self.load_thumbnail, "album", release)
+            label_w = max(8, w - 21)
+            self.put(yy, 11, release.get("name", "Untitled release"), 1 if not selected else 6, selected, width=label_w)
+            group = release.get("_artist_group") or release.get("album_group") or release.get("album_type", "release")
+            group_label = {"album": "ALBUM", "single": "SINGLE / EP", "appears_on": "APPEARS ON", "compilation": "COMPILATION"}.get(group, "RELEASE")
+            year = (release.get("release_date") or "")[:4]
+            tracks = release.get("total_tracks")
+            tail = " · ".join(part for part in (group_label, year, f"{tracks} tracks" if tracks is not None else "") if part)
+            self.put(yy + 1, 11, tail, 4, width=label_w)
+            self.put(yy, 3, "›" if selected else " ", 2, True)
+        if not self.items:
+            unavailable = profile.get("unavailable_groups", {})
+            if self.artist_group == "all" and unavailable:
+                message = "CATALOG PARTIAL · Spotify не предоставил группы " + ", ".join(unavailable)
+            elif self.artist_group in unavailable:
+                message = f"Группа недоступна для этого входа Spotify (HTTP {unavailable[self.artist_group]})"
+            else:
+                message = "В каталоге пока нет релизов"
+            self.put(list_y, 4, message, 4, width=w - 8)
 
     def render_player(self, y, w, height):
         self.hit(y, 1, height, w - 2, "panel", "player")
@@ -1406,6 +1718,8 @@ class App:
             self.put(title_y + line, text_x, text, 1, True, width=text_w)
         detail_y = title_y + max(1, len(title_lines))
         self.put(detail_y, text_x, artists(item) or "Spotify", 2, width=text_w)
+        if (item.get("artists") or [{}])[0].get("id"):
+            self.hit(detail_y, text_x, 1, text_w, "key", "g")
         if height >= 6:
             self.put(detail_y + 1, text_x, (item.get("album") or {}).get("name", ""), 4, width=text_w)
         status_y = min(art_y + art_h - 1, detail_y + 2)
@@ -1565,6 +1879,13 @@ class App:
                 if isinstance(owner, dict)
                 else ""
             )
+            if kind == "artist":
+                genres = data.get("genres") or []
+                identity = data.get("id", "")
+                discriminator = ", ".join(genres[:2]) or "Spotify artist"
+                if identity:
+                    discriminator += " · ID " + identity[:6]
+                by = discriminator
             duration_label = ""
             if kind == "track":
                 milliseconds = data.get("duration_ms") or 0
@@ -1759,6 +2080,8 @@ class App:
         if selected and self.items:
             kind, item = self.items[self.selected]
             item = {**item, "type": kind}
+        elif self.artist_profile:
+            item = {**(self.artist_profile.get("artist") or {}), "type": "artist"}
         else:
             item = self.playback.get("item") or {}
         url = share_url(item)
@@ -1779,11 +2102,16 @@ class App:
         lines = [
             ("/ или строка поиска", "В альбоме/плейлисте — поиск внутри списка"),
             ("F2", "Общий поиск Spotify"),
-            ("Ввод в поиске", "Подсказки: обложка, трек, автор, альбом, время"),
+            ("0–4 в поиске", "Все · треки · артисты · альбомы · плейлисты"),
+            ("N в поиске", "Следующая страница результатов"),
+            ("Ввод в поиске", "Треки · артисты · альбомы · плейлисты"),
             ("↓ / Tab в поиске", "Перейти к результатам"),
-            ("Enter в поиске", "Найти музыку сразу"),
-            ("Enter в списке", "Открыть плейлист / включить трек"),
+            ("Enter в поиске", "Открыть артиста / альбом / плейлист или трек"),
+            ("Enter в списке", "Открыть артиста / альбом / плейлист или трек"),
             ("P", "Включить весь плейлист / альбом"),
+            ("g", "Страница артиста текущего трека"),
+            ("y / Y", "Ссылка Spotify на артиста / выбранный элемент"),
+            ("1–4 в профиле", "Альбомы · синглы/EP · участия · все релизы"),
             ("Tab", "Переключить поиск и список"),
             ("↑ / ↓ · PgUp / PgDn", "Выбрать строку / страницу"),
             ("Space", "Пауза / продолжить"),
@@ -1990,6 +2318,12 @@ class App:
         self.search_layout = True
         self.search_suspended = False
         query = self.query.strip()
+        if query != self.search_query:
+            self.search_query = query
+            self.search_category = "all"
+            self.search_results = {"track": [], "artist": [], "album": [], "playlist": []}
+            self.search_offsets = {"all": 0, "track": 0, "artist": 0, "album": 0, "playlist": 0}
+            self.search_paging = {}
         self.section = "Поиск: " + query
         candidates = dict(self.saved_tracks)
         for entries in self.library_data.values():
@@ -2018,12 +2352,12 @@ class App:
         )
         cached = self.search_cache.get(query)
         if cached and time.monotonic() - cached[0] < 30:
-            self.events.put(("search", {"_query": query, "_results": cached[1]}, None))
+            self.events.put(("search", {"_query": query, "_results": cached[1], "_category": "all", "_offset": 0}, None))
             self.search_due = 0
         else:
             self.search_due = time.monotonic() + 0.18 if query else 0
 
-    def dispatch_search(self):
+    def dispatch_search(self, category=None, offset=None):
         if self.search_scope == "context":
             self.filter_context()
             return
@@ -2033,8 +2367,20 @@ class App:
             return
         if "search" in self.pending:
             return
+        category = category or self.search_category
+        offset = self.search_offsets.get(category, 0) if offset is None else offset
         self.search_due = 0
-        self.submit("search", lambda q: {"_query": q, "_results": API.search(q)}, query)
+        self.notice = "Ищу в Spotify…"
+        self.submit(
+            "search",
+            lambda q, c=category, o=offset: {
+                "_query": q,
+                "_category": c,
+                "_offset": o,
+                "_results": API.search(q, c, o),
+            },
+            query,
+        )
 
     def update_live_search(self):
         if self.search_suspended:
@@ -2121,6 +2467,8 @@ class App:
             self.begin_panel_transition()
             self.fullscreen = False
             return
+        if k == "\x1b" and self.artist_profile and not self.search_layout and self.go_back():
+            return
         if k == curses.KEY_RESIZE:
             self.s.clear()
             return
@@ -2130,7 +2478,7 @@ class App:
                 index = next(
                     (i for i, (_, item) in enumerate(self.context_items) if item.get("id") == identity), 0
                 )
-                self.history.append((self.context_section, self.context_items, index))
+                self.push_history(self.context_section, self.context_items, index)
             self.help = False
             self.enter_search_layout("spotify")
             if not self.query.strip():
@@ -2206,6 +2554,25 @@ class App:
                 self.query += k
                 self.schedule_search()
             return
+        if self.search_layout and self.search_scope == "spotify":
+            if isinstance(k, str) and k.startswith("search-category:"):
+                self.select_search_category(k.split(":", 1)[1])
+                return
+            category_keys = {"0": "all", "1": "track", "2": "artist", "3": "album", "4": "playlist"}
+            if k in category_keys:
+                self.select_search_category(category_keys[k])
+                return
+            if k in ("n", "]"):
+                self.load_more_search()
+                return
+        if self.artist_profile and not self.search_layout:
+            if isinstance(k, str) and k.startswith("artist-group:"):
+                self.select_artist_group(k.split(":", 1)[1])
+                return
+            groups = {"1": "album", "2": "single", "3": "appears_on", "4": "all"}
+            if k in groups:
+                self.select_artist_group(groups[k])
+                return
         if k in ("?", curses.KEY_F1):
             self.help = True
         elif k == "L":
@@ -2233,16 +2600,27 @@ class App:
                 self.like_target = (track["id"], liked, track)
                 self.notice = "Обновляю избранное…"
                 self.submit("favorite", API.toggle_favorite, track["id"])
+        elif k == "g":
+            current = self.playback.get("item") or {}
+            artist = next((value for value in current.get("artists", []) if value.get("id")), None)
+            if artist:
+                self.notice = "Загружаю страницу артиста…"
+                self.submit("artist", open_artist, artist["id"], artist.get("name", "Artist"))
         elif k in (curses.KEY_UP, curses.KEY_DOWN, curses.KEY_NPAGE, curses.KEY_PPAGE):
             offset = {curses.KEY_UP: -1, curses.KEY_DOWN: 1, curses.KEY_NPAGE: 10, curses.KEY_PPAGE: -10}[k]
             self.begin_selection(self.selected + offset)
         elif k in tuple(str(i) for i in range(1, len(SECTIONS) + 1)):
             self.library(SECTIONS[int(k) - 1])
+        elif k == "n" and self.search_layout:
+            self.load_more_search()
         elif k in ("\n", "\r", curses.KEY_ENTER) and self.items:
             kind, item = self.items[self.selected]
             if kind == "track":
                 self.start_track(item)
-            elif kind in ("playlist", "album", "artist"):
+            elif kind == "artist":
+                self.notice = "Загружаю страницу артиста…"
+                self.submit("artist", open_artist, item["id"], item.get("name", "Artist"))
+            elif kind in ("playlist", "album"):
                 self.notice = "Загрузка треков…"
                 self.submit("open", open_context, kind, item["id"], item.get("name", "Треки"))
             else:
@@ -2252,31 +2630,22 @@ class App:
             kind, item = self.items[self.selected]
             if kind == "track":
                 self.start_track(item)
-            elif kind in ("playlist", "album", "artist"):
+            elif kind == "artist":
+                self.notice = "Загружаю страницу артиста…"
+                self.submit("artist", open_artist, item["id"], item.get("name", "Artist"))
+            elif kind in ("playlist", "album"):
                 self.notice = "Запускаю плейлист…"
                 self.submit("command", API.start_context, kind, item)
         elif k == "o" and self.items:
             kind, item = self.items[self.selected]
-            if kind in ("playlist", "album"):
+            if kind == "artist":
+                self.notice = "Загружаю страницу артиста…"
+                self.submit("artist", open_artist, item["id"], item.get("name", "Artist"))
+            elif kind in ("playlist", "album"):
                 self.notice = "Загрузка треков…"
                 self.submit("open", open_context, kind, item["id"], item.get("name", "Треки"))
         elif k in (curses.KEY_LEFT, curses.KEY_BACKSPACE, "\x7f", "\b") and self.history:
-            self.section, self.items, self.selected = self.history.pop()
-            uri = (self.items[0][1].get("_context_uri") or "") if self.items else ""
-            if (
-                uri
-                and not self.section.startswith("Поиск:")
-                and all(kind == "track" for kind, _ in self.items)
-            ):
-                self.context_items = list(self.items)
-                self.context_section = self.section
-                self.context_kind = uri.split(":")[1] if uri.count(":") >= 2 else "список"
-                self.context_query = ""
-                self.set_search_scope("context")
-                self.query = ""
-            else:
-                self.context_items = None
-                self.set_search_scope("spotify")
+            self.go_back()
         elif k in ("+", "=", "-", "m"):
             self.volume_key(k)
         elif k in (" ", "n", "p", "s", "r"):
@@ -2422,6 +2791,9 @@ class _IntroRenderer(App):
         self.default_background = -1
         self._panel_x = 0
         self._panel_width = screen.getmaxyx()[1]
+        # Required by put() and symbol_image()
+        self._render_grid = None
+        self._display_grid = None
         try:
             screen.encoding = "utf-8"
         except (AttributeError, TypeError):
@@ -2431,10 +2803,30 @@ class _IntroRenderer(App):
             curses.use_default_colors()
         except curses.error:
             self.default_background = 0
-        for pair, fg in ((1, 252), (2, 78), (3, 110), (4, 244), (11, 239)):
-            self.init_pair(pair, fg, -1)
+        # Initialize all color pairs used by symbol_image/dot_image and put()
+        for i, fg, bg in [
+            (1, 252, -1),
+            (2, 78, -1),
+            (3, 110, -1),
+            (4, 244, -1),
+            (5, 222, -1),
+            (6, 255, 236),
+            (7, 147, -1),
+            (8, 210, -1),
+            (9, 255, 235),
+            (10, 110, 235),
+            (11, 239, -1),
+            (12, 78, 236),
+        ]:
+            self.init_pair(i, fg, bg)
+        # Don't call bkgd() - it forces a background color even with use_default_colors()
+        # and breaks terminal transparency on Windows PDCurses.
+        # Let the terminal handle background (transparency, Acrylic, images, themes).
+        # Basic curses setup for proper rendering
         try:
-            screen.bkgd(" ", curses.color_pair(1) if curses.has_colors() else 0)
+            screen.keypad(True)
+            curses.curs_set(0)
+            screen.timeout(16)
         except curses.error:
             pass
 

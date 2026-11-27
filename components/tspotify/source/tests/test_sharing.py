@@ -6,6 +6,7 @@ from tspotify import sharing
 def test_share_url_does_not_use_tracking_or_private_urls():
     assert sharing.share_url({"uri": "spotify:playlist:abc123"}) == "https://open.spotify.com/playlist/abc123"
     assert sharing.share_url({"type": "track", "id": "abc"}) == "https://open.spotify.com/track/abc"
+    assert sharing.share_url({"type": "artist", "id": "artist123"}) == "https://open.spotify.com/artist/artist123"
     assert sharing.share_url({"id": "../credentials"}) == ""
     assert sharing.share_url({"external_urls": {"spotify": "https://bad.example"}}) == ""
 
