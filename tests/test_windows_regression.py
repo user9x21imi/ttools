@@ -170,5 +170,36 @@ class WindowsComponentSelection(unittest.TestCase):
             sys.path.pop(0)
 
 
+class LauncherIntegrationRegression(unittest.TestCase):
+    """The launcher must find the bundled components and keep terminal transparency."""
+
+    def test_dev_catalog_is_discovered_without_user_sources(self):
+        import ttools.core as core
+        dev = core._dev_catalog_path()
+        self.assertIsNotNone(dev, "development apps.local.json was not discovered")
+        old_config = core.CONFIG
+        old_catalog = os.environ.pop("TTOOLS_CATALOG", None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                core.CONFIG = Path(tmp)
+                apps, errors = core.load_apps()
+        finally:
+            core.CONFIG = old_config
+            if old_catalog is not None:
+                os.environ["TTOOLS_CATALOG"] = old_catalog
+        self.assertFalse(errors, errors)
+        ids = {app["id"] for app in apps}
+        self.assertTrue({"tspotify", "tthings", "ttelegram", "tvpn"}.issubset(ids),
+                        f"launcher discovered only {sorted(ids)}")
+
+    def test_launcher_keeps_terminal_transparent(self):
+        source = (ROOT / "ttools/__main__.py").read_text(encoding="utf-8")
+        self.assertNotIn("self.s.bkgd(", source,
+                         "bkgd() paints an opaque window background over terminal transparency")
+        self.assertIn("use_default_colors()", source)
+        self.assertIn("except curses.error", source,
+                      "use_default_colors() must be guarded on Windows PDCurses")
+
+
 if __name__ == "__main__":
     unittest.main()

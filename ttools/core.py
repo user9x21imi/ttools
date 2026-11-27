@@ -48,6 +48,25 @@ def add_source(path):
     temp.write_text(json.dumps(values, ensure_ascii=False, indent=2),encoding='utf-8')
     temp.replace(CONFIG/'sources.json')
 
+def _dev_catalog_path():
+    """Return a development apps.local.json when running from the source tree.
+
+    A fresh source checkout has no configured catalog sources, so without this
+    fallback the launcher shows an empty "Приложения / 00" list and none of the
+    components can be started.  Only use it when the caller has not configured
+    any explicit sources or TTOOLS_CATALOG override.
+    """
+    here = Path(__file__).resolve()
+    repo_root = here.parents[1]  # ttools/core.py -> repository root
+    components = repo_root/'components'
+    if not components.is_dir():
+        return None
+    names = ('tspotify', 'tthings', 'tvpn', 'ttelegram', 'tsoundcloud')
+    if not any((components/name/'source').is_dir() for name in names):
+        return None
+    dev_catalog = repo_root/'apps.local.json'
+    return dev_catalog if dev_catalog.is_file() else None
+
 def load_apps():
     merged, errors = {}, []
     managed = os.environ.get('TTOOLS_CATALOG')
@@ -57,6 +76,16 @@ def load_apps():
                 merged[app['id']] = app
         except (OSError, ValueError, TypeError) as e:
             errors.append(f'{path}: {e}')
+    # Only fall back to the bundled development catalog when the user has not
+    # configured anything; explicit sources always take priority.
+    if not merged and not managed and not sources():
+        dev_path = _dev_catalog_path()
+        if dev_path:
+            try:
+                for app in read_catalog(dev_path):
+                    merged[app['id']] = app
+            except (OSError, ValueError, TypeError) as e:
+                errors.append(f'{dev_path}: {e}')
     order = {'tspotify':0, 'tsoundcloud':1, 'soundcloud':1, 'tyoutube':2, 'youtube':2, 'ttelegram':3, 'tvpn':4, 'tthings':5}
     return sorted(merged.values(), key=lambda app: order.get(app['id'], 6)), errors
 
