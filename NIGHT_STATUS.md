@@ -16,22 +16,24 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 - `3e173b5` align suite/dev version catalogs with TVPN 1.4.1 (required by release validation)
 - `08cc137`, `e397cb2` night report + TSoundCloud cross-platform test fix
 - `72469c1` direct VT backend for launcher on Windows (`ttools/vtbackend.py`, PDCurses fallback for headless) — reviewed: no bkgd, default `-1` backgrounds emit no SGR, full curses API used by launcher/components present
-- `8a0965d` TTelegram: find `wt.exe` via per-user app execution alias (local, not yet pushed; cloud agent still finishing related work)
+- `8a0965d` TTelegram: find `wt.exe` via per-user app execution alias
+- `364baf7`, `67416f4` night docs + VT shims for TSpotify/TVPN (`_vt.py`) and TTelegram launch hardening; `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` committed
+- `7e4ddde`, `4c320ad`, `b18fe95` final night status/task updates; all commits pushed to `origin/integration/windows-preview`
 
 ## Component state
 | Component | Branch/commits | State | Tests |
 |-----------|----------------|-------|-------|
-| Launcher (ttools) | merged `fix/update-feed-and-refresh` + fixes + `72469c1` | dev + installed catalog confirmed (4 apps in Windows install); direct VT backend on interactive Windows consoles | 78 passed, 12 skipped, 6 subtests |
+| Launcher (ttools) | merged `fix/update-feed-and-refresh` + fixes + `72469c1` | dev + installed catalog confirmed (4 apps in Windows install); direct VT backend on interactive Windows consoles | 79 passed, 12 skipped, 6 subtests |
 | TSpotify | `fix/tspotify-windows-runtime` @ `590bc42` MERGED | verify-runtime OK in isolated Windows install | 397 passed, 2 skipped |
 | TVPN | `fix/tvpn-windows` + `fix/tvpn-windows-runtime` + `c9f10af` | Windows backend pwsh, doctor, splash, demo UI, reduced motion, region helper, graph; offline only | 13 passed, 5 skipped (PTY POSIX-only) |
-| TTelegram | `feature/ttelegram-modernization` MERGED + Windows payload downloaded | installer/doctor OK; real auth not attempted | 9 passed, 1 skipped |
+| TTelegram | `feature/ttelegram-modernization` MERGED + Windows payload downloaded | installer/doctor OK; wt.exe alias, bundle auto-install, trampoline argv fixed; real auth not attempted | 12 passed, 1 skipped |
 | tthings | `origin/fix/tthings-windows-runtime` MERGED | VT console modes, UTF-8 subprocesses, gallery preview | 60 passed, 7 skipped, 4870 subtests |
 | TSoundCloud | Linux preview only | NOT in standard Windows install | 14 passed, 3 skipped (cross-platform test fixture fixed) |
 
 ## Transparency contract
 - Launcher, TSpotify, TVPN: no `bkgd()`; `use_default_colors()` + pairs with `-1` background.
-- On Windows the launcher now uses `ttools/vtbackend.py` (`72469c1`) when a real console is attached; PDCurses remains the headless fallback. The VT backend preserves `-1` backgrounds (no explicit background SGR) in contrast to PDCurses, which normalizes `-1` to a concrete palette entry. `tests/test_vtbackend.py` guards this (5 passed).
-- `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` (cloud agent, untracked) recommends applying the same VT selection hook to TSpotify/TVPN entry points; component hooks not integrated yet.
+- On Windows the launcher, TSpotify and TVPN now use a direct VT backend (`ttools/vtbackend.py` + per-component `_vt.py` shims, `72469c1`/`67416f4`) when a real console is attached; PDCurses remains the headless fallback. The VT backend preserves `-1` backgrounds (no explicit background SGR) in contrast to PDCurses, which normalizes `-1` to a concrete palette entry. `tests/test_vtbackend.py` guards this (6 passed).
+- `docs/WINDOWS_VT_TRANSPARENCY_DIAGNOSIS.md` documents the PDCurses root cause and the backend migration; it is committed.
 - Windows visual verification in Windows Terminal with transparency/Acrylic/image remains manual. Automated absence of forced ANSI background sequences is not proof of visual transparency.
 
 ## Build/test package (verified)
@@ -40,12 +42,13 @@ Owner: local integrator (Strata). Do not touch other agents' worktrees.
 - Isolated install: `python installer.py --prefix C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix --bundle . --no-shortcuts --defer-system`
 - Result: `{"installed": "1.1.0-preview.4", "complete": false, "unsupported": []}` — no PATH/registry changes, no VPN privileged setup, no system network changes.
 - Installed launcher list: tspotify, ttelegram, tvpn, tthings (empty "00" catalog regression fixed in installed mode via suite runner setting TTOOLS_CATALOG).
-- Smoke: tthings `--version` 0.7.2; tspotify `verify-runtime` JSON OK; tvpn `version`/`status`/`doctor` OK (OpenVPN present, not connected); ttelegram Windows-native `doctor` OK.
+- Smoke: tthings `--version` 0.7.2; tspotify `verify-runtime` JSON OK; tvpn `version`/`status`/`doctor` OK (OpenVPN present/not connected, Interactive Service running); ttelegram Windows-native `doctor` OK (tdlib 1.8.66).
+- Final rebuild after all fixes: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-final-release --platform windows-x86_64` → 159,117,158 bytes; isolated install to `C:\Users\user\AppData\Local\Temp\opencode\ttools-final-prefix --no-shortcuts --defer-system` → `{"installed":"1.1.0-preview.4","complete":false,"unsupported":[]}`; `runner.py --list` shows 4 supported apps. No user install or system changes.
 
 ## Remote state
-- Pushed `integration/windows-preview` `9724404..e397cb2` to `origin`. Local `8a0965d` plus in-flight cloud-agent fixes are not pushed yet.
+- Pushed `integration/windows-preview` `9724404..b18fe95` to `origin`; local branch matches remote, no pending commits.
 - Created Draft PR #8: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
-- A cloud VT agent had switched this worktree to `fix/vt-console-mode-transparency` and left `ttools/__main__.py` + `tools/*` diagnostics uncommitted. The branch was safely restored to `integration/windows-preview`, all commits retained, and the agent's uncommitted work preserved untouched. The agent is currently still editing TTelegram files in this worktree — do not stage or modify them.
+- A cloud VT agent had switched this worktree to `fix/vt-console-mode-transparency`; the branch was safely restored to `integration/windows-preview` and all of that agent's work was preserved, reviewed and integrated. No in-flight edits remain.
 
 ## Blockers (need user)
 - Real VPN connect (OpenVPN) — offline/demo checks only at night.

@@ -36,7 +36,7 @@
 
 | ID | Task | Blocker | Resolution Plan |
 |----|------|---------|-----------------|
-| B001 | T002 | Visual transparency in Windows Terminal cannot be verified headlessly | Manual check by user; launcher VT backend landed, component hooks pending from cloud agent |
+| B001 | T002 | Visual transparency in Windows Terminal cannot be verified headlessly | Manual check by user; launcher/TSpotify/TVPN VT hooks landed, only visual acceptance remains |
 | B002 | T003 | Real Telegram authorization not possible at night | User performs auth on their account |
 | B003 | T008 | No user-facing release published (by design) | Night build only in temp prefix; user release after verification |
 
@@ -44,14 +44,13 @@
 
 ## Coordination Notes
 
-- **oc-local** (Strata): Completed TVPN + integration + test build in `ttools-integration`. Sole owner of that worktree; preserving untracked VT work from cloud-1.
-- **cloud-1**: VT backend for launcher is committed (`72469c1`); agent still editing TTelegram files and holds the untracked VT diagnosis doc in this worktree; do not touch its in-flight files.
-- **cloud-2**: TTelegram wt.exe alias fix committed locally (`8a0965d`); additional launcher/prefix recovery fixes in flight; TSoundCloud deferred.
+- **oc-local** (Strata): Completed TVPN + integration + final test build in `ttools-integration`; sole owner; all agent work preserved and integrated.
+- **cloud-1**: VT backend (`72469c1`) and TSpotify/TVPN shims (`67416f4`) committed and verified; diagnosis doc committed.
+- **cloud-2**: TTelegram wt.exe alias (`8a0965d`) plus launch/prefix recovery fixes committed and verified; TSoundCloud deferred.
 - **Lead**: Architecture, review, integration, launcher, install, updates.
 
 ## Next Steps
 
-1. Wait for cloud agents to finish in-flight TTelegram/VT work, then review and commit only after verification.
-2. Rebuild the Windows test package from final commits; re-run isolated install + smoke checks.
-3. Push final verified commits to `origin/integration/windows-preview`; update Draft PR.
-4. User to verify real VPN connect, Telegram auth, Spotify login, visual transparency.
+1. All agent work integrated, verified and pushed to `origin/integration/windows-preview` (`9724404..b18fe95`); Draft PR #8 open.
+2. Rebuilds and isolated installs were re-run from final commits; smoke checks pass.
+3. User to verify real VPN connect, Telegram auth, Spotify login, visual transparency; no user-facing release published.
