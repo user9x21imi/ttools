@@ -41,9 +41,10 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 ## Release build / one-command install (validated)
 - Fresh release build from `72469c1`: `python tools/build_release.py --output C:\temp\ttg-night-release --platform windows-x86_64` → `ttools-windows-x86_64.zip` (94,158,950 bytes, `complete=False` because Windows Telegram payload is not yet published in a GitHub Release).
 - Extracted ZIP to `C:\temp\ttg-night-unpacked\ttools`; ran `cmd /c "Install-ttools.cmd -Prefix C:\temp\ttg-one-cmd-test -Components tthings"` with `TTOOLS_INSTALLER_NO_PAUSE=1` → **exit 0**, installed tthings 0.7.2 into `1.1.0-preview.4`, no manual steps. One-command install validated end-to-end.
+- Final rebuild after all fixes: `C:\temp\ttg-final-release\ttools-windows-x86_64.zip` (94,166,354 bytes). Full one-command install of all four apps with system setup deferred: `cmd /c "Install-ttools.cmd -Prefix C:\temp\ttg-final-test2 -DeferSystem"` → **exit 0**. `runner.py --list` shows all four apps ready; TSpotify `verify-runtime` ok; TVPN `version` 1.4.1 and `status` ok; TTelegram `doctor` ok. A run without `-DeferSystem` fails only because winget is absent in this environment (external dependency, not a code regression).
 
 ## Remote
-- `git push origin integration/windows-preview`: `9724404..e397cb2`. Local pending commits awaiting final push: `72469c1` (VT backend), `8a0965d` (TTelegram wt.exe alias), `364baf7`/`e397cb2` docs, `67416f4` (final integration).
+- `git push origin integration/windows-preview`: `9724404..e397cb2`, then final `e397cb2..7e4ddde`. All commits are pushed; no local pending work. No GitHub Release was published — release awaits user acceptance.
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
 - All cloud-agent artifacts are now committed and verified; no in-flight TTelegram edits remain in this worktree.
 
