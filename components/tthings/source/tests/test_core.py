@@ -61,10 +61,10 @@ class SettingsTests(unittest.TestCase):
 
 class CommandTests(unittest.TestCase):
     def test_json_catalog(self):
-        p=subprocess.run([sys.executable,'-m','tthings','--list','--json'],capture_output=True,text=True,check=True)
+        p=subprocess.run([sys.executable,'-m','tthings','--list','--json'],capture_output=True,text=True,check=True,encoding='utf-8',errors='replace')
         self.assertEqual(len(json.loads(p.stdout)),len(ENTRIES))
     def test_noninteractive_is_actionable(self):
-        p=subprocess.run([sys.executable,'-m','tthings'],capture_output=True,text=True)
+        p=subprocess.run([sys.executable,'-m','tthings'],capture_output=True,text=True,encoding='utf-8',errors='replace')
         self.assertNotEqual(p.returncode,0)
         self.assertIn('--snapshot',p.stderr)
 

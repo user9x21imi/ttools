@@ -375,7 +375,12 @@ function Get-InstallerArguments {
     if ($Preview) { $arguments += '--preview' }
     if ($DeferSystem) { $arguments += '--defer-system' }
     if ($Prefix) { $arguments += @('--prefix', $Prefix) }
-    if ($Components) { $arguments += @('--components', $Components) }
+    if ($Components) {
+        $arguments += @('--components', $Components)
+    } else {
+        # Exclude components that have no native Windows build (e.g. SoundCloud).
+        $arguments += @('--components', 'tspotify,ttelegram,tvpn,tthings')
+    }
     return $arguments
 }
 

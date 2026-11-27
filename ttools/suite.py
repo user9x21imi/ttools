@@ -18,10 +18,30 @@ from .distribution import (atomic_json, digest, extract_zip, fetch, latest_suite
 
 NATIVE_TRAMPOLINE = "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')"
 APP_IDS = ('tspotify','tsoundcloud','ttelegram','tthings','tvpn')
+# Components that have a real native package for a platform. SoundCloud has no
+# Windows build, so it is excluded from the standard Windows installation.
+WINDOWS_COMPONENTS = ('tspotify','ttelegram','tthings','tvpn')
+UNSUPPORTED_BY_PLATFORM = {'windows-x86_64': ('tsoundcloud',)}
+
+def supported_components(target_platform):
+    """APP_IDS minus components with no native package for target_platform."""
+    blocked = set(UNSUPPORTED_BY_PLATFORM.get(target_platform, ()))
+    return [a for a in APP_IDS if a not in blocked]
+
+def default_components(target_platform=None):
+    """Default component selection; on Windows never include unsupported apps."""
+    if target_platform is None:
+        target_platform = platform_id()
+    return supported_components(target_platform)
 
 def run(argv, **kwargs):
     print('+ '+ ' '.join(map(str,argv)),flush=True)
     subprocess.run(list(map(str,argv)),check=True,**kwargs)
+
+def powershell_exe():
+    """Prefer PowerShell 7+; fall back to in-box Windows PowerShell 5.1."""
+    if os.name!='nt':return 'powershell.exe'
+    return shutil.which('pwsh.exe') or shutil.which('pwsh') or shutil.which('powershell.exe') or 'powershell.exe'
 
 def python_in(directory):
     return directory/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
@@ -120,7 +140,7 @@ def install_component(app,release,defer_system=False):
             if os.name=='nt':
                 setup=dest/'platforms/windows/install.ps1'
                 # Setup dependencies and UAC are handled by a purpose-built local script.
-                run(['powershell.exe','-NoProfile','-File',str(release/'scripts/setup-vpn-windows.ps1'),'-Setup',str(setup)])
+                run([powershell_exe(),'-NoProfile','-File',str(release/'scripts/setup-vpn-windows.ps1'),'-Setup',str(setup)])
             else:
                 run(['bash',str(dest/'platforms/macos/install.sh')])
         return [str(py),str(dest/'launch.py')],env
@@ -149,14 +169,16 @@ except (OSError,ValueError,RuntimeError) as error:
         commands=prefix/'bin';commands.mkdir(exist_ok=True)
         for app in ('ttools',*components):
             args='' if app=='ttools' else '--app '+app+' '
-            (commands/(app+'.cmd')).write_text('@echo off\r\nchcp 65001 >nul\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
+            (commands/(app+'.cmd')).write_text('@echo off\r\nchcp 65001 >nul\r\nset "PYTHONUTF8=1"\r\nset "PYTHONIOENCODING=utf-8"\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
         # Update the user PATH, never the system PATH.
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,'Environment',0,winreg.KEY_READ|winreg.KEY_WRITE) as key:
             try:value,_=winreg.QueryValueEx(key,'Path')
             except FileNotFoundError:value=''
-            if str(commands).casefold() not in [x.casefold() for x in value.split(';')]:
-                winreg.SetValueEx(key,'Path',0,winreg.REG_EXPAND_SZ,value.rstrip(';')+';'+str(commands))
+            parts=[x for x in value.split(';') if x.strip()]
+            if str(commands).casefold() not in [x.casefold() for x in parts]:
+                parts.append(str(commands))
+                winreg.SetValueEx(key,'Path',0,winreg.REG_EXPAND_SZ,';'.join(parts))
     else:
         import shlex
         commands=Path.home()/'.local/bin';commands.mkdir(parents=True,exist_ok=True)
@@ -225,7 +247,7 @@ def configure_tvpn_system(release,target):
     elif target.startswith('macos-'):
         run(['bash',dest/'platforms/macos/install.sh'])
     elif target=='windows-x86_64':
-        run(['powershell.exe','-NoProfile','-File',release/'scripts/setup-vpn-windows.ps1',
+        run([powershell_exe(),'-NoProfile','-File',release/'scripts/setup-vpn-windows.ps1',
              '-Setup',dest/'platforms/windows/install.ps1'])
     else:
         raise RuntimeError(f'No TVPN system setup for {target}')
@@ -500,9 +522,9 @@ def launch_installed(prefix,args):
                         print(f"\nttools {remote['version']} доступен (установлена версия {state['version']}).")
                         answer=input('Обновить сейчас? [д/Н] ').strip().casefold()
                         if answer in ('д','да','y','yes') and update(prefix,force=True,remote=remote):
-                            os.execv(sys.executable,[sys.executable,str(prefix/'runner.py'),*args])
+                            _reexec(prefix,args)
             elif update(prefix,automatic=True):
-                os.execv(sys.executable,[sys.executable,str(prefix/'runner.py'),*args])
+                _reexec(prefix,args)
         except Exception as error:
             atomic_json(prefix/'update-error.json',{'time':time.time(),'error':str(error)})
             atomic_json(prefix/'update-check.json',{'checked':time.time(),'status':'unavailable'})
@@ -530,13 +552,17 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description='ttools suite install-only')
     parser.add_argument('--prefix')
     parser.add_argument('--bundle',type=Path,default=Path(__file__).resolve().parents[1])
-    parser.add_argument('--components',default=','.join(APP_IDS))
+    parser.add_argument('--components',default=None)
     parser.add_argument('--allow-partial',action='store_true')
     parser.add_argument('--defer-system',action='store_true',help='Stage VPN without privileged network setup; VPN will not be ready')
     parser.add_argument('--no-shortcuts',action='store_true')
     parser.add_argument('--plan',action='store_true')
     args=parser.parse_args(argv)
-    selected=tuple(x for x in args.components.split(',') if x)
+    if args.components is None:
+        # Default excludes components with no native package for this platform.
+        selected=tuple(default_components(platform_id()))
+    else:
+        selected=tuple(x for x in args.components.split(',') if x)
     if not selected:parser.error('At least one component is required')
     try:
         if args.plan:
@@ -549,3 +575,14 @@ def main(argv=None):
         return 1
 
 if __name__=='__main__':raise SystemExit(main())
+
+
+def _reexec(prefix,args):
+    """Re-execute runner.py after an in-place update; Windows-safe."""
+    runner=str(Path(prefix).resolve()/'runner.py')
+    argv=[sys.executable,runner,*args]
+    if os.name=='nt':
+        # os.execv on Windows cannot reliably replace the current process; spawn
+        # a fresh one and propagate its status after releasing our handles.
+        raise SystemExit(subprocess.call(argv))
+    os.execv(sys.executable,argv)

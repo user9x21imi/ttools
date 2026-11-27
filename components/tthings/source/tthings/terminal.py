@@ -30,14 +30,32 @@ class Terminal:
             from ctypes import wintypes
             kernel=ctypes.windll.kernel32
             kernel.GetStdHandle.restype=wintypes.HANDLE
-            for channel,flags in ((-11,4),(-10,0x200)):
-                handle=kernel.GetStdHandle(channel)
-                mode=wintypes.DWORD()
-                if kernel.GetConsoleMode(handle,ctypes.byref(mode)):
-                    self.win_modes.append((handle,mode.value))
-                    # Disable line input, echo and quick-edit, preserve processed input.
-                    new=mode.value|flags if channel==-11 else (mode.value|0x200|0x80)&~(0x2|0x4|0x40)
+            kernel.GetConsoleMode.argtypes=[wintypes.HANDLE,ctypes.POINTER(wintypes.DWORD)]
+            kernel.SetConsoleMode.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+            STD_OUTPUT_HANDLE=-11;STD_INPUT_HANDLE=-10
+            ENABLE_PROCESSED_INPUT=0x1;ENABLE_LINE_INPUT=0x2;ENABLE_ECHO_INPUT=0x4
+            ENABLE_EXTENDED_FLAGS=0x80;ENABLE_QUICK_EDIT_MODE=0x40
+            ENABLE_VIRTUAL_TERMINAL_PROCESSING=0x4;ENABLE_VIRTUAL_TERMINAL_INPUT=0x200
+            # Output: virtual-terminal processing. Input: cbreak-style, no echo,
+            # no quick-edit, preserve processed input; restore exactly on stop.
+            for channel,mask_set,mask_clear in (
+                    (STD_OUTPUT_HANDLE,ENABLE_VIRTUAL_TERMINAL_PROCESSING,0),
+                    (STD_INPUT_HANDLE,ENABLE_EXTENDED_FLAGS|ENABLE_VIRTUAL_TERMINAL_INPUT,ENABLE_LINE_INPUT|ENABLE_ECHO_INPUT|ENABLE_QUICK_EDIT_MODE)):
+                try:
+                    handle=kernel.GetStdHandle(channel)
+                    mode=wintypes.DWORD()
+                    if not handle or not kernel.GetConsoleMode(handle,ctypes.byref(mode)):
+                        continue
+                    original=mode.value
+                    if channel==STD_INPUT_HANDLE:
+                        new=(original|mask_set|ENABLE_PROCESSED_INPUT)&~mask_clear
+                    else:
+                        new=original|mask_set
+                    self.win_modes.append((handle,original))
                     kernel.SetConsoleMode(handle,new)
+                except (OSError,ValueError):
+                    # Not a real console (redirected output); still emit VT codes.
+                    pass
         else:
             import termios,tty
             self.old=termios.tcgetattr(sys.stdin.fileno())
@@ -96,8 +114,15 @@ class Terminal:
                 time.sleep(.005)
             ch=msvcrt.getwch()
             if ch in ('\x00','\xe0'):
-                return {'H':'up','P':'down','K':'left','M':'right','I':'pgup','Q':'pgdown'}.get(msvcrt.getwch(),'')
-            return {'\r':'enter','\x08':'backspace','\x1b':'escape','\t':'tab'}.get(ch,ch)
+                return {'H':'up','P':'down','K':'left','M':'right','I':'pgup','Q':'pgdown','S':'delete','R':'f1',';':'f1'}.get(msvcrt.getwch(),'')
+            if ch==ESC:
+                # Windows Terminal with ENABLE_VIRTUAL_TERMINAL_INPUT sends VT
+                # sequences; a bare ESC remains 'escape'.
+                seq=ch
+                while msvcrt.kbhit() and len(seq)<12:
+                    seq+=msvcrt.getwch()
+                return _vt_key(seq)
+            return {'\r':'enter','\n':'enter','\x08':'backspace','\x7f':'backspace','\t':'tab'}.get(ch,ch)
         if select.select([sys.stdin],[],[],timeout)[0]:
             data=os.read(sys.stdin.fileno(),4096)
             if not data:raise EOFError
@@ -131,3 +156,9 @@ class Terminal:
             parts.append(ESC+'[K')
         parts.append(ESC+'[0m')
         self.write(''.join(parts))
+
+
+def _vt_key(seq):
+    table={'\x1b[A':'up','\x1b[B':'down','\x1b[C':'right','\x1b[D':'left','\x1b[5~':'pgup','\x1b[6~':'pgdown','\x1b[3~':'delete','\x1b[H':'home','\x1b[F':'end','\x1bOP':'f1','\x1bOQ':'f2','\x1bOA':'up','\x1bOB':'down','\x1bOC':'right','\x1bOD':'left','\x1b[12~':'f2'}
+    if seq in table:return table[seq]
+    return 'escape'

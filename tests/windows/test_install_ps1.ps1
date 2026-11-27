@@ -146,9 +146,9 @@ try {
     $script:Preview = $false
     $script:Prefix = $null
     $script:Components = $null
-    Assert-Equal @('--allow-partial') (Get-InstallerArguments) 'A default Windows install did not select the supported partial suite.'
+    Assert-Equal @('--allow-partial','--components','tspotify,ttelegram,tvpn,tthings') (Get-InstallerArguments) 'A default Windows install did not select the supported partial suite.'
     $script:DeferSystem = $true
-    Assert-Equal @('--allow-partial','--defer-system') (Get-InstallerArguments) 'The deferred system setup option was not forwarded.'
+    Assert-Equal @('--allow-partial','--defer-system','--components','tspotify,ttelegram,tvpn,tthings') (Get-InstallerArguments) 'The deferred system setup option was not forwarded.'
     $script:DeferSystem = $false
 
     $standard = Join-Path $script:FixtureRoot 'Programs\Python\Python314\python.exe'
