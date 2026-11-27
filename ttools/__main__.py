@@ -1,5 +1,4 @@
 import argparse
-import curses
 from concurrent.futures import ThreadPoolExecutor
 import json
 import locale
@@ -14,6 +13,20 @@ try:
 except ImportError:
     termios = None
 import time
+
+# PDCurses (windows-curses) writes an explicit background attribute for every
+# cell, which paints an opaque rectangle over a transparent Windows Terminal.
+# The VT backend emits no background SGR for default (-1) pairs, so the native
+# terminal background — including acrylic/image transparency — stays visible.
+if sys.platform == 'win32':
+    from . import vtbackend
+    try:
+        if not vtbackend.usable():raise OSError('no interactive console')
+        curses = vtbackend
+    except Exception:
+        import curses
+else:
+    import curses
 
 from .core import add_source, available, check_update, load_apps
 from .appearance import konsole_profile
