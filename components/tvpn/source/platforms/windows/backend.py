@@ -37,14 +37,9 @@ def check_stop():
         raise Stopped()
 
 
-def powershell_exe():
-    # Prefer PowerShell 7+; fall back to in-box Windows PowerShell 5.1.
-    return shutil.which('pwsh.exe') or shutil.which('pwsh') or shutil.which('powershell.exe') or 'powershell.exe'
-
-
 def powershell(code):
-    result = subprocess.run([powershell_exe(), '-NoProfile', '-NonInteractive', '-Command', code],
-                            capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=15)
+    result = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', code],
+                            capture_output=True, text=True, encoding='utf-8', timeout=15)
     if result.returncode:
         raise RuntimeError(result.stderr.strip()[:180])
     return result.stdout.strip()
