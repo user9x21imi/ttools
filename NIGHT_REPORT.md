@@ -9,7 +9,7 @@ Date: 2026-11-28 (night session). Worktree: `C:\Users\user\source\repos\ttools-i
 4. Fixed pytest collection collision between the downloaded runtime payload and repo tests (`norecursedirs`).
 5. Built and installed a real Windows test package into an isolated prefix; no user install, no PATH/registry changes, no network/VPN setup changes.
 6. Cherry-picked only the useful `eb0fdbd` fix from a newly discovered remote branch `origin/fix/windows-support-and-launch` (`db993a5`); the regressive TVPN-restore commit on that branch was deliberately NOT merged.
-7. Preserved and committed a cloud agent's TSoundCloud PDCurses `set_escdelay` guard with regenerated wheel/checksums (`e746e87`); TSoundCloud tests remain green.
+7. Preserved and verified cloud-agent TSoundCloud work: PDCurses `set_escdelay` guard, extracted testable `configure_escape_delay()` with 3 regression tests, refreshed wheel/checksums and `docs/TSOUNDCLOUD_WINDOWS_LIMITATIONS.md` (`e746e87`, `3a20595`); 17 tests pass, 3 skipped.
 
 ## Exact commands
 ```
@@ -30,7 +30,7 @@ python C:\Users\user\AppData\Local\Temp\opencode\ttools-test-prefix\runner.py --
 | TSpotify `components/tspotify/source/tests` | 397 passed, 2 skipped |
 | TTelegram `components/ttelegram` | 12 passed, 1 skipped |
 | tthings `components/tthings/source/tests` | 60 passed, 7 skipped, 4870 subtests |
-| TSoundCloud `components/tsoundcloud/source/tests` | 14 passed, 3 skipped (test fixture now uses a real absolute path and parses JSON; TSoundCloud still not in standard Windows install) |
+| TSoundCloud `components/tsoundcloud/source/tests` | 17 passed, 3 skipped (absolute-path/JSON fixture + 3 PDCurses escape-delay tests; TSoundCloud still not in standard Windows install) |
 
 Installed-package smoke checks: launcher lists 4 supported apps; tthings `--version` = 0.7.2; TSpotify `verify-runtime` JSON ok; TVPN `version`/`status`/`doctor` ok (OpenVPN not connected); TTelegram Windows-native `doctor` ok. Update/rollback/checksum-protection E2E covered by root suites (`test_update_e2e_qa.py`, `test_complete_suite_update.py`, `test_release_gate.py`, `test_distribution.py`).
 
@@ -48,7 +48,7 @@ Installed-package smoke checks: launcher lists 4 supported apps; tthings `--vers
 - Rebuild after `db993a5`/`e746e87`: `python tools/build_release.py --output C:\Users\user\AppData\Local\Temp\opencode\ttools-default-components-release --platform windows-x86_64` → 159,117,753 bytes. `C:\Users\user\AppData\Local\Temp\opencode\check_install_defaults.py` verifies offline (mocked network/subprocess) that a plain Windows install selects exactly `tspotify,ttelegram,tvpn,tthings` in both `bootstrap.py` and `install-local.py`; SoundCloud is excluded. No actual install or system change was performed by this smoke. Root suite re-run: 79 passed, 12 skipped, 6 subtests.
 
 ## Remote
-- `git push origin integration/windows-preview`: through `01776db`. Two newest local commits (`db993a5`, `e746e87`) still need pushing. No GitHub Release was published — release awaits user acceptance.
+- `git push origin integration/windows-preview`: through `cf12777`; the final verified commit(s) are pushed with this report. No GitHub Release was published — release awaits user acceptance.
 - Draft PR #8 created: `https://github.com/user9x21imi/ttools/pull/8` (base `main`).
 - All cloud-agent artifacts are now committed and verified; no in-flight TTelegram edits remain in this worktree.
 
