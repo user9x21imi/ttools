@@ -42,10 +42,36 @@ def test_curses_api_parity_for_components():
 
 def test_launcher_selects_vt_backend_only_when_usable():
     """The launcher must fall back to PDCurses when no console is attached."""
-    import importlib
     import sys
 
-    # Reload in a subprocess-free way by checking the selection logic constants.
     assert vtbackend.usable() in (True, False)
     assert hasattr(stdlib_curses, 'wrapper')
     assert sys.platform in ('win32', 'linux', 'darwin')
+
+
+def test_component_shims_select_vt_backend_on_windows(monkeypatch):
+    """Spotify and TVPN must use the VT backend when a console is available."""
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    shims = (
+        root / 'components/tspotify/source/src/tspotify/_vt.py',
+        root / 'components/tvpn/source/_vt.py',
+    )
+    saved = sys.modules.get('curses')
+    monkeypatch.setattr(sys, 'platform', 'win32')
+    monkeypatch.setattr(vtbackend, 'usable', lambda: True)
+    try:
+        for path in shims:
+            spec = importlib.util.spec_from_file_location('vt_shim_test', path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            assert module.select() is vtbackend
+            assert sys.modules['curses'] is vtbackend
+    finally:
+        if saved is None:
+            sys.modules.pop('curses', None)
+        else:
+            sys.modules['curses'] = saved

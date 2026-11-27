@@ -278,7 +278,10 @@ def run(args):
                             pass
                 api._restore_gate = time.monotonic()
             # Import curses only for the UI: doctor, installation and OAuth work without a TTY.
-            import curses
+            # On Windows use the direct-VT backend so the terminal background
+            # (including transparency/acrylic) remains visible.
+            from . import _vt
+            curses = _vt.select()
             from . import ui
 
             ui.API = api

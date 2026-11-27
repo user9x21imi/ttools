@@ -3,7 +3,11 @@
 import json
 from contextlib import nullcontext
 import collections
-import curses
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+import _vt
+curses = _vt.select()
 import ipaddress
 import locale
 import os

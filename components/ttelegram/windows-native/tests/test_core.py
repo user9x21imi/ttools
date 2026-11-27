@@ -40,6 +40,21 @@ class Core(unittest.TestCase):
             root=Path(d);(root/'versions/v1').mkdir(parents=True);manage.write(root/'current.json',{'version':'v1'});self.assertEqual(manage.current(root),(root/'versions/v1').resolve())
             manage.write(root/'current.json',{'version':'../../outside'})
             with self.assertRaises(RuntimeError):manage.current(root)
+    def test_missing_pointer_has_actionable_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(RuntimeError) as error:manage.current(Path(d))
+            self.assertIn('install.cmd',str(error.exception))
+    def test_bundle_prefix_fallback_installs_on_demand(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);bundle=root/'bundle';installed=root/'prefix'
+            (bundle/'bootstrap').mkdir(parents=True);(bundle/'bootstrap/python.exe').write_bytes(b'');(bundle/'wheels').mkdir()
+            calls=[]
+            with patch.object(manage,'BUNDLE',bundle),patch.object(manage,'default_prefix',lambda:installed),patch.object(manage,'install',side_effect=lambda prefix:calls.append(prefix)):
+                self.assertEqual(manage.recover_bundle_prefix(bundle,'version'),installed);self.assertEqual(calls,[installed])
+                manage.write(installed/'current.json',{'version':'v1'})
+                self.assertEqual(manage.recover_bundle_prefix(bundle,'launch'),installed);self.assertEqual(len(calls),1)
+                self.assertEqual(manage.recover_bundle_prefix(bundle,'install'),bundle)
+                self.assertEqual(manage.recover_bundle_prefix(installed,'version'),installed)
     def test_dirty_refresh_does_not_erase_images(self):
         screen=vt.newwin(4,20);out=io.StringIO()
         with patch('sys.stdout',out):

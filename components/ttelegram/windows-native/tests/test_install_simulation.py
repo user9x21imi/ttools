@@ -19,6 +19,8 @@ class Install(unittest.TestCase):
                 account=base/'account-data';account.mkdir();(account/'sentinel').write_text('preserve')
                 release('test-v2');manage.install(prefix)
                 self.assertEqual(manage.read(prefix/'current.json')['version'],'test-v2');self.assertEqual(manage.read(prefix/'previous.json')['version'],'test-v1')
+                launcher=(prefix/'ttelegram.cmd').read_text(encoding='utf-8')
+                self.assertIn('"%~dp0." "%~dp0manage.py"',launcher);self.assertNotIn('"%~dp0" "%~dp0manage.py"',launcher)
                 self.assertTrue((prefix/'versions/test-v2/runtime/Lib/site-packages/telegram/_native_tdjson.py').exists())
                 # Doctor failure must leave the previous current installation intact.
                 release('broken-v3')
