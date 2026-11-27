@@ -39,6 +39,21 @@ FUNCTION_ESC = {f"[{code}~": curses.KEY_F0 + index for index, code in
 ORDERS = list(permutations(("player", "spectrum", "list")))
 
 
+def configure_escape_delay(curses_module):
+    """Set the short ESC timeout where the curses implementation supports it.
+
+    windows-curses (PDCurses) has no ``set_escdelay`` — its ESC timeout is a
+    console setting — so the call must be optional for Windows to run at all.
+    """
+    setter = getattr(curses_module, "set_escdelay", None)
+    if setter is None:
+        return
+    try:
+        setter(35)
+    except curses_module.error:
+        pass
+
+
 def clean(value):
     return "".join(" " if unicodedata.category(c) in ("Cc", "Cf", "Cs") else c for c in str(value))
 
@@ -1378,15 +1393,7 @@ class App:
         self.screen.keypad(True)
         self.screen.timeout(40)
         curses.raw()
-        # PDCurses (windows-curses) has no set_escdelay; its ESC timeout is
-        # configured by the console instead.  Keep the short delay on curses
-        # implementations that support it (ncurses).
-        set_escdelay = getattr(curses, "set_escdelay", None)
-        if set_escdelay is not None:
-            try:
-                set_escdelay(35)
-            except curses.error:
-                pass
+        configure_escape_delay(curses)
         curses.noecho()
         try:
             curses.curs_set(0)

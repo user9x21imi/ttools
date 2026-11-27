@@ -13,8 +13,31 @@ import wave
 from tsound.audio import Playback
 from tsound.demo import Demo
 from tsound.service import Comment, SoundCloud, unique
-from tsound.ui import App
+from tsound.ui import App, configure_escape_delay
 from tsound.visual import Timeline, column, decoded_waveform, peaks
+
+
+class WindowsCursesCompatibilityTest(unittest.TestCase):
+    class FakeError(Exception):
+        pass
+
+    def test_missing_set_escdelay_is_tolerated(self):
+        fake = type("PDCurses", (), {"error": self.FakeError})()
+        self.assertIsNone(configure_escape_delay(fake))
+
+    def test_supported_set_escdelay_is_used(self):
+        calls = []
+        fake = type("Ncurses", (), {"error": self.FakeError,
+                                    "set_escdelay": calls.append})()
+        configure_escape_delay(fake)
+        self.assertEqual(calls, [35])
+
+    def test_escdelay_errors_are_ignored(self):
+        def fail(value):
+            raise self.FakeError(value)
+        fake = type("Curses", (), {"error": self.FakeError,
+                                   "set_escdelay": staticmethod(fail)})()
+        self.assertIsNone(configure_escape_delay(fake))
 
 
 class TimelineTest(unittest.TestCase):
