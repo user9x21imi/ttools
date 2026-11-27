@@ -423,7 +423,9 @@ def run(script, selected='amsterdam', demo=False, reduced_motion=False):
                                curses.COLOR_YELLOW, curses.COLOR_WHITE, curses.COLOR_BLUE], 1):
             curses.init_pair(i, c, -1)
         curses.init_pair(7,141 if curses.COLORS>=256 else curses.COLOR_MAGENTA,-1)
-        screen.bkgd(' ', curses.color_pair(5))
+        # Don't call bkgd() - it forces a background color even with use_default_colors()
+        # and breaks terminal transparency on Windows PDCurses.
+        # Let the terminal handle background (transparency, Acrylic, images, themes).
         screen.timeout(100)
         curses.mousemask(curses.BUTTON1_CLICKED | curses.BUTTON1_RELEASED | getattr(curses,'BUTTON4_PRESSED',0) | getattr(curses,'BUTTON5_PRESSED',0))
         journal, ended, sampled = False, False, 0

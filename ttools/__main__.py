@@ -136,7 +136,13 @@ class UI:
 
     def colors(self):
         curses.start_color()
-        curses.use_default_colors()
+        # Try to use terminal's default colors for transparency/acrylic support.
+        # On Windows PDCurses this may not work; we still init pairs with -1 bg.
+        try:
+            curses.use_default_colors()
+            self._has_default_colors = True
+        except curses.error:
+            self._has_default_colors = False
         # Default foreground/background follow the terminal's own light/dark theme.
         # Never switch profiles or redefine the terminal's palette.
         if curses.COLORS>=256:
@@ -156,7 +162,9 @@ class UI:
                 rgb=tuple(round(a+(b-a)*mix) for a,b in zip(neutral,target))
                 color=_nearest_xterm(rgb) if curses.COLORS>=256 else fallback
                 curses.init_pair(ramp_pair(list(APP_STYLES)[index],level),color,-1)
-        self.s.bkgd(' ', curses.color_pair(1))
+        # Do NOT set a window background with bkgd() - this would obscure
+        # terminal transparency, acrylic, and background images.
+        # The differential painter (flush) only draws foreground characters.
 
     def put(self,y,x,text,pair=1,bold=False):
         h,w=self.s.getmaxyx()
