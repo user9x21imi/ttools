@@ -1,0 +1,3 @@
+# Payload files verified by SHA-256 manifests must keep their exact bytes.
+components/ttelegram/windows-native/** -text
+components/ttelegram/windows-native-package.json -text

@@ -13,3 +13,4 @@ components/**/wheels/
 *.key
 *.ovpn
 .env
+components/ttelegram/windows-native/bootstrap/
