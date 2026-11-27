@@ -235,7 +235,9 @@ class App:
             (12, 78, 236),
         ]:
             self.init_pair(i, fg, bg)
-        self.s.bkgd(" ", curses.color_pair(1) if curses.has_colors() else 0)
+        # Don't call bkgd() - it forces a background color even with use_default_colors()
+        # and breaks terminal transparency on Windows PDCurses.
+        # Let the terminal handle background (transparency, Acrylic, images, themes).
         self.s.timeout(16)
         self.s.keypad(True)
         curses.curs_set(0)
@@ -2789,6 +2791,9 @@ class _IntroRenderer(App):
         self.default_background = -1
         self._panel_x = 0
         self._panel_width = screen.getmaxyx()[1]
+        # Required by put() and symbol_image()
+        self._render_grid = None
+        self._display_grid = None
         try:
             screen.encoding = "utf-8"
         except (AttributeError, TypeError):
@@ -2798,10 +2803,30 @@ class _IntroRenderer(App):
             curses.use_default_colors()
         except curses.error:
             self.default_background = 0
-        for pair, fg in ((1, 252), (2, 78), (3, 110), (4, 244), (11, 239)):
-            self.init_pair(pair, fg, -1)
+        # Initialize all color pairs used by symbol_image/dot_image and put()
+        for i, fg, bg in [
+            (1, 252, -1),
+            (2, 78, -1),
+            (3, 110, -1),
+            (4, 244, -1),
+            (5, 222, -1),
+            (6, 255, 236),
+            (7, 147, -1),
+            (8, 210, -1),
+            (9, 255, 235),
+            (10, 110, 235),
+            (11, 239, -1),
+            (12, 78, 236),
+        ]:
+            self.init_pair(i, fg, bg)
+        # Don't call bkgd() - it forces a background color even with use_default_colors()
+        # and breaks terminal transparency on Windows PDCurses.
+        # Let the terminal handle background (transparency, Acrylic, images, themes).
+        # Basic curses setup for proper rendering
         try:
-            screen.bkgd(" ", curses.color_pair(1) if curses.has_colors() else 0)
+            screen.keypad(True)
+            curses.curs_set(0)
+            screen.timeout(16)
         except curses.error:
             pass
 
