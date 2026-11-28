@@ -26,10 +26,71 @@ _lock=threading.RLock();_decoder=codecs.getincrementaldecoder('utf-8')('replace'
 
 def _emit(text):
     with _lock:sys.stdout.write(text);sys.stdout.flush()
+
 def _dimensions():
+    """Get terminal dimensions using multiple fallback methods.
+    
+    Priority order:
+    1. os.get_terminal_size() on stdin/stdout/stderr
+    2. Windows Console API (GetConsoleScreenBufferInfo) on stdout
+    3. COLUMNS/LINES environment variables
+    4. Fallback to (24, 80)
+    """
+    # Try os.get_terminal_size on all standard file descriptors
+    for fd in (0, 1, 2):
+        try:
+            size = os.get_terminal_size(fd)
+            if size.lines > 0 and size.columns > 0:
+                return max(4, size.lines), max(12, size.columns)
+        except OSError:
+            pass
+    
+    # On Windows, try Console API for actual viewport size
+    if os.name == 'nt':
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            class COORD(ctypes.Structure):
+                _fields_ = [('X', wintypes.SHORT), ('Y', wintypes.SHORT)]
+            class SMALL_RECT(ctypes.Structure):
+                _fields_ = [('Left', wintypes.SHORT), ('Top', wintypes.SHORT),
+                            ('Right', wintypes.SHORT), ('Bottom', wintypes.SHORT)]
+            class CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+                _fields_ = [('dwSize', COORD),
+                            ('dwCursorPosition', COORD),
+                            ('wAttributes', wintypes.WORD),
+                            ('srWindow', SMALL_RECT),
+                            ('dwMaximumWindowSize', COORD)]
+            
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.GetStdHandle.restype = wintypes.HANDLE
+            kernel.GetStdHandle.argtypes = [wintypes.DWORD]
+            kernel.GetConsoleScreenBufferInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(CONSOLE_SCREEN_BUFFER_INFO)]
+            kernel.GetConsoleScreenBufferInfo.restype = wintypes.BOOL
+            
+            # Try stdout handle (-11) first as it's typically connected to the console in Windows Terminal
+            handle = kernel.GetStdHandle(-11)
+            if handle and handle != wintypes.HANDLE(-1).value:
+                csbi = CONSOLE_SCREEN_BUFFER_INFO()
+                if kernel.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi)):
+                    width = csbi.srWindow.Right - csbi.srWindow.Left + 1
+                    height = csbi.srWindow.Bottom - csbi.srWindow.Top + 1
+                    if width > 0 and height > 0:
+                        return max(4, height), max(12, width)
+        except Exception:
+            pass
+    
+    # Check environment variables
     try:
-        size=os.get_terminal_size(0);return max(4,size.lines),max(12,size.columns)
-    except OSError:return (24,80)
+        cols = int(os.environ.get('COLUMNS', '0'))
+        lines = int(os.environ.get('LINES', '0'))
+        if cols > 0 and lines > 0:
+            return max(4, lines), max(12, cols)
+    except ValueError:
+        pass
+    
+    return (24, 80)
 def get_cell_size():return _cells
 def supports_sixel():return _sixel
 def color_pair(number):return number<<8
