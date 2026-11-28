@@ -8,6 +8,7 @@ import queue
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import select
 import stat
 import subprocess
 import sys
@@ -85,21 +86,47 @@ def require_clean(root):
 
 @contextlib.contextmanager
 def backend_idle():
-    """Linux protected backend lock, not a network-interface readiness heuristic."""
-    if not sys.platform.startswith('linux'):yield;return
-    path=Path('/run/riseup-amsterdam.lock')
-    if not path.exists():yield;return
+    """Hold the protected backend's shared kernel lock across update/install."""
+    if not sys.platform.startswith('linux'):
+        yield
+        return
+    helper=Path('/var/lib/riseup-vpn/backend.sh')
+    if not helper.is_file():
+        yield  # isolated user-prefix install before system setup
+        return
+    command=shutil.which('sudo') or '/usr/bin/sudo'
+    guard=None
     try:
-        import fcntl
-        lock=path.open('rb')
-        try:fcntl.flock(lock.fileno(),fcntl.LOCK_SH|fcntl.LOCK_NB)
-        except OSError:
-            lock.close();raise
-    except OSError as error:
-        raise UpdateError('Backend занят или его lock недоступен; штатно остановите VPN. Для старого lock требуется однократная системная настройка') from error
-    try:yield
-    finally:lock.close()
-
+        guard=subprocess.Popen([command,'-n','--',str(helper),'--text','--guard'],
+                               stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                               text=True,encoding='utf-8',errors='replace')
+        if not select.select([guard.stdout],[],[],5)[0]:
+            guard.terminate();guard.wait(timeout=2)
+            raise UpdateError('Истёк тайм-аут проверки системной блокировки VPN')
+        ready=guard.stdout.readline().strip()
+        if ready!='TVPN_GUARD_READY':
+            try:guard.wait(timeout=5)
+            except subprocess.TimeoutExpired:guard.terminate();guard.wait(timeout=2)
+            details=guard.stderr.read().strip()
+            raise UpdateError('Защищённый backend не смог заблокировать старт VPN; обновление отменено. Обновите системную установку. '+details[:180])
+    except (OSError,subprocess.TimeoutExpired) as error:
+        if guard is not None:
+            if guard.poll() is None:guard.terminate();guard.wait(timeout=2)
+            for stream in (guard.stdin,guard.stdout,guard.stderr):stream.close()
+        raise UpdateError('Не удалось установить системную блокировку backend; обновление отменено') from error
+    except UpdateError:
+        for stream in (guard.stdin,guard.stdout,guard.stderr):stream.close()
+        raise
+    try:
+        yield
+    finally:
+        guard.stdin.close()
+        try:guard.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            guard.terminate()
+            try:guard.wait(timeout=2)
+            except subprocess.TimeoutExpired:guard.kill();guard.wait()
+        guard.stdout.close();guard.stderr.close()
 
 
 def version_tuple(value):
@@ -306,7 +333,10 @@ def _apply_locked(update,root,fetch=download,helper=install_helper,platform=None
             extract(archive,stage)
             if local_version(stage)!=update.version:raise UpdateError('Версия архива не совпадает с манифестом')
             changed=needs_helper_update(root,stage,platform)
-            replace_files(root,stage,finalize=(lambda:helper(stage,platform)) if changed else None)
+            # Upgrade the root guard first. Older installations cannot yet hold the
+            # shared lock, but the privileged installer itself refuses an active backend.
+            if changed:helper(stage,platform)
+            with backend_idle():replace_files(root,stage)
     finally:lock.unlink(missing_ok=True)
 
 
@@ -314,8 +344,7 @@ def apply(update,root,fetch=download,helper=install_helper,platform=None):
     root=Path(root).resolve()
     with lifecycle(root):
         require_clean(root)
-        with backend_idle():
-            return _apply_locked(update,root,fetch=fetch,helper=helper,platform=platform)
+        return _apply_locked(update,root,fetch=fetch,helper=helper,platform=platform)
 
 
 def restart(root,region):

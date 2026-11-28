@@ -9,7 +9,7 @@ def tm(*args, check=True):
     return subprocess.run(['tmux','-L',SOCKET,*args], check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 def state():
     try: return json.loads(CFG.read_text())
-    except (OSError, ValueError): return {'layout':'full', 'theme':0}
+    except (OSError, ValueError): return {'layout':'sidebar', 'theme':0}
 def save(s):
     CFG.parent.mkdir(parents=True, exist_ok=True); CFG.write_text(json.dumps(s))
 def panes():
@@ -21,10 +21,10 @@ def style(s):
     for key,val in {
         'pane-border-status':'top',
         'pane-border-format':border_format(),
-        'status-style':f'bg=#111827,fg={accent}',
+        'status-style':f'bg=default,fg={accent}',
         'pane-border-style':'fg=#334155',
         'pane-active-border-style':f'fg={accent},bold',
-        'message-style':f'bg=#1e293b,fg={accent},bold',
+        'message-style':f'bg=default,fg={accent},bold',
         'status-left':f'#[bold,fg={accent}]  >>> TTELEGRAM #[fg={second}] / {name}  ',
         'status-right':'#[fg=#94a3b8]Ctrl+O НАСТРОЙКИ | Ctrl+L ЧАТЫ | Ctrl+Q ВЫХОД  #[dim,fg=#475569]by user9x21imi#[default] ',
     }.items(): tm('set-option','-t','telegram',key,val)

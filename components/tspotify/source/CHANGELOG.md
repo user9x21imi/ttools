@@ -1,6 +1,46 @@
 # Changelog
 
+## 0.2.0
+
+- Show a refreshed Fastfetch-style system screen while the Spotify engine starts, then keep it visible for three seconds after the client is ready.
+- Keep the spectrum panel visible in compact 78×24 terminals, including the default Terminal.app window on macOS.
+- Start the engine alongside the intro, keep download and authorization output from corrupting the screen, and stop cleanly if startup is interrupted.
+- Build and publish native archives for Linux x86_64, macOS Apple Silicon/Intel, and Windows x64 from the same tagged release.
+
 ## 0.1.0
+
+- Keep shuffle/repeat buttons visible at stable positions across resizes and compact panels.
+- Confirm the final applied mode instead of clearing repeat intent on intermediate native events.
+- Restart saved end-of-track positions at zero and restore the actual queue for Next/Previous after startup.
+
+- Use consistent timeline colors in full redraws and animated frames, eliminating the flashing full-width green bar.
+- Adapt the main window to side-by-side playback/library panels in wide terminals.
+
+- Restart an ended queue from zero with Play; Next can restart the queue after it has stopped, matching the native remote Resume behavior.
+- Preserve uncached album/playlist contexts instead of replacing them with a one-track queue.
+- Expose native upcoming tracks for an accurate Next label, including shuffled order and repeat-one.
+- Adapt the expanded player to portrait and landscape terminals, keeping artwork on the left in wide windows.
+
+- Closing Share/Jam dialogs preserves the expanded player and underlying layout; background animation cannot draw over modal dialogs.
+
+- Native engine v5 applies shuffle and all repeat modes through local Connect controls and exposes authoritative player state.
+- Fix truncated 100-track queue commands and upstream empty-selector handling for phone Connect selections.
+- Add clickable Share and clipboard links for tracks/collections.
+- Create/retrieve native Jam sessions asynchronously, display returned participants and a real invitation link.
+- Keep shuffle/repeat buttons visible in compact and expanded playback views.
+
+- Search inside an open playlist/album instantly by track, artist or album; F2 keeps global Spotify search available.
+- Filtering keeps the original playback queue, and clearing the field/Esc restores all collection tracks.
+
+- Focused search temporarily expands the result list above a compact player/spectrum, restoring the saved layout when returning to playback.
+- Search results stay expanded while moving between the input and list; Esc, player focus and F3 restore the usual arrangement.
+
+- Live search suggestions include cover thumbnails, artist, album and duration; stale replies cannot overwrite newer input.
+- Select tracks through native Connect load when available, without Web API play/device-discovery round trips.
+- Disable the embedded engine's competing custom queue; keep Spotify's native queue authoritative.
+- Preload nearby artwork and metadata; update native playback state every 100 ms and immediately after commands.
+- Background remote observation and missing metadata no longer block local playback updates.
+- Preserve repeated transport inputs and allow replacing a pending track selection.
 
 - Use Spotify access-point port 443 instead of hanging on blocked port 4070; network startup timeouts no longer incorrectly request another login.
 

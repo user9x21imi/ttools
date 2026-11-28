@@ -10,8 +10,10 @@ import stat
 import ssl
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 
 REPOSITORY = 'user9x21imi/ttools'
@@ -58,6 +60,50 @@ def version_key(value):
     major,minor,patch,stage,number=match.groups()
     return (int(major),int(minor),int(patch),1 if stage is None else 0,
             {'alpha':0,'preview':0,'beta':1,'rc':2,None:0}[stage],int(number or 0))
+
+SOURCE_COMMIT_RE=re.compile(r'[0-9a-f]{40}')
+COMPONENT_IDS=('tspotify','tsoundcloud','ttelegram','tvpn','tthings')
+
+def valid_source_commit(value):
+    return isinstance(value,str) and SOURCE_COMMIT_RE.fullmatch(value) is not None
+
+def validate_component_versions(root, strict=False):
+    """Check component version declarations before a bundle can be activated."""
+    root=Path(root)
+    try:versions=json.loads((root/'components/versions.json').read_text(encoding='utf-8'))
+    except (OSError,ValueError) as error:raise ValueError('Invalid component version catalog') from error
+    if not isinstance(versions,dict) or not versions or any(
+            not isinstance(name,str) or not isinstance(value,str) or not value.strip()
+            for name,value in versions.items()):
+        raise ValueError('Invalid component version catalog')
+    if strict and set(versions)!=set(COMPONENT_IDS):
+        raise ValueError('Component catalog does not declare the full suite')
+    for app,version in versions.items():
+        if app not in COMPONENT_IDS:
+            raise ValueError(f'Unknown component in version catalog: {app}')
+        candidates=(root/'components'/app/'app.json',
+                    root/'components'/app/'update.json',
+                    root/'components'/app/'source'/'update.json')
+        found=False
+        for path in candidates:
+            if not path.is_file():continue
+            try:metadata=json.loads(path.read_text(encoding='utf-8'))
+            except ValueError as error:raise ValueError(f'Invalid component metadata: {path.relative_to(root)}') from error
+            declared=metadata.get('version') if isinstance(metadata,dict) else None
+            if declared is not None:
+                found=True
+                if declared!=version:
+                    raise ValueError(f'Component version mismatch: {app} catalog={version} metadata={declared}')
+        if strict and not found:
+            raise ValueError(f'Component has no versioned metadata: {app}')
+    if strict:
+        # Windows Telegram is an explicit platform preview with its own version.
+        windows=root/'components/ttelegram/windows-native/app.json'
+        if not windows.is_file():raise ValueError('Windows Telegram preview metadata is missing')
+        metadata=json.loads(windows.read_text(encoding='utf-8'))
+        if not isinstance(metadata.get('version'),str) or not metadata['version'].strip():
+            raise ValueError('Windows Telegram preview has no version')
+    return versions
 
 
 def default_prefix():
@@ -134,6 +180,34 @@ def read_remote_json(url):
         fetch(url,path,2*1024*1024)
         return json.loads(path.read_text(encoding='utf-8'))
 
+def latest_suite_manifest(preview=False):
+    """Read the newest suite manifest without consuming GitHub API quota."""
+    namespace='{http://www.w3.org/2005/Atom}'
+    with tempfile.TemporaryDirectory(prefix='ttools-release-feed-') as folder:
+        path=Path(folder)/'releases.atom'
+        fetch(f'https://github.com/{REPOSITORY}/releases.atom',path,2*1024*1024)
+        root=ET.parse(path).getroot()
+    prefix=f'https://github.com/{REPOSITORY}/releases/tag/'
+    for entry in root.findall(namespace+'entry'):
+        for link in entry.findall(namespace+'link'):
+            href=link.get('href','')
+            if not href.startswith(prefix):continue
+            tag=urllib.parse.unquote(href[len(prefix):])
+            if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc|preview)\.\d+)?',tag):continue
+            if not preview and '-' in tag:continue
+            manifest_url=f'https://github.com/{REPOSITORY}/releases/download/{urllib.parse.quote(tag,safe="")}/suite-update.json'
+            try:manifest=read_remote_json(manifest_url)
+            except urllib.error.HTTPError as error:
+                if error.code==404:continue
+                raise
+            if manifest.get('schema_version') not in (1,2) or manifest.get('app_id')!='ttools':
+                raise ValueError('Invalid suite update manifest')
+            if manifest.get('version')!=tag[1:]:raise ValueError('Release tag/version mismatch')
+            if manifest.get('schema_version')==2 and not valid_source_commit(manifest.get('source_commit')):
+                raise ValueError('Invalid suite source commit')
+            return manifest
+    raise RuntimeError('No published suite release in this update channel')
+
 def extract_zip(archive,directory):
     directory=Path(directory).resolve()
     with zipfile.ZipFile(archive) as package:
@@ -162,10 +236,26 @@ def extract_zip(archive,directory):
 def verify_bundle(root):
     root=Path(root).resolve()
     manifest=json.loads((root/'bundle.json').read_text(encoding='utf-8'))
-    if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':
+    schema=manifest.get('schema_version')
+    if schema not in (1,2) or manifest.get('app_id')!='ttools':
         raise ValueError('Invalid suite bundle')
     if not re.fullmatch(r'[0-9A-Za-z._-]+',manifest.get('version','')):
         raise ValueError('Invalid suite version')
+    if schema==2:
+        version_key(manifest['version'])
+        if not valid_source_commit(manifest.get('source_commit')):
+            raise ValueError('Invalid suite source commit')
+        try:
+            import ast
+            module=ast.parse((root/'ttools/__init__.py').read_text(encoding='utf-8'))
+            bundled_version=next(node.value.value for node in module.body
+                if isinstance(node,ast.Assign) and any(isinstance(target,ast.Name) and target.id=='__version__' for target in node.targets)
+                and isinstance(node.value,ast.Constant) and isinstance(node.value.value,str))
+        except (OSError,StopIteration,SyntaxError) as error:
+            raise ValueError('Bundle has no readable launcher version') from error
+        if bundled_version!=manifest['version']:
+            raise ValueError('Bundle launcher/version metadata mismatch')
+        validate_component_versions(root,strict=True)
     for name,expected in manifest['files'].items():
         path=(root/name).resolve()
         if not path.is_relative_to(root) or not re.fullmatch(r'[a-f0-9]{64}',expected) or not path.is_file() or digest(path)!=expected:

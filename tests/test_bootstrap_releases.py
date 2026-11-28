@@ -19,6 +19,26 @@ class ReleaseDiscoveryTests(unittest.TestCase):
         self.assertIn('/releases/download/v1.1.0-preview.1/suite-update.json',read.call_args_list[1].args[0])
         self.assertTrue(all('api.github.com' not in c.args[0] for c in read.call_args_list))
 
+    def test_schema_two_release_requires_and_preserves_source_commit(self):
+        commit='c'*40
+        manifest={'schema_version':2,'app_id':'ttools','version':'1.2.0-preview.1','source_commit':commit}
+        with patch.object(bootstrap,'read',side_effect=[self.feed('v1.2.0-preview.1'),json.dumps(manifest).encode()]):
+            self.assertEqual(bootstrap.release_manifest(True),manifest)
+        invalid=dict(manifest,source_commit='short')
+        with patch.object(bootstrap,'read',side_effect=[self.feed('v1.2.0-preview.1'),json.dumps(invalid).encode()]):
+            with self.assertRaisesRegex(ValueError,'source commit'):
+                bootstrap.release_manifest(True)
+
+    def test_legacy_bundle_does_not_need_new_distribution_provenance_api(self):
+        # The first schema-1 public ZIP predates distribution.valid_source_commit.
+        self.assertIsNone(bootstrap.verify_bundle_commit(
+            {'schema_version':1,'version':'1.1.0-preview.1'},
+            {'version':'1.1.0-preview.1','platform':'windows-x86_64'}))
+        with self.assertRaisesRegex(ValueError,'source commit'):
+            bootstrap.verify_bundle_commit(
+                {'schema_version':2,'source_commit':'bad'},
+                {'source_commit':'bad'})
+
     def test_stable_excludes_preview_and_foreign_links(self):
         with patch.object(bootstrap,'read',return_value=self.feed('v1.1.0-preview.1','other-package')) as read:
             with self.assertRaisesRegex(RuntimeError,'No published'):bootstrap.release_manifest()

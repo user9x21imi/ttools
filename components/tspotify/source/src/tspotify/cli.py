@@ -47,8 +47,9 @@ def single_instance():
         stream.close()
 
 
-def engine_authorize(url, qr=False, ready=None):
-    print("\nSpotify просит отдельно разрешить встроенное воспроизведение.", flush=True)
+def engine_authorize(url, qr=False, ready=None, *, quiet=False, status=None):
+    if not quiet:
+        print("\nSpotify просит отдельно разрешить встроенное воспроизведение.", flush=True)
     if qr:
         import httpx
         import qrcode
@@ -67,7 +68,10 @@ def engine_authorize(url, qr=False, ready=None):
             raise ValueError("Ожидается адрес возврата http://127.0.0.1:8989/…")
         httpx.get(pasted, timeout=5)
     else:
-        print("Если браузер не открылся, перейдите по этой ссылке:\n" + url, flush=True)
+        if status:
+            status("Откройте окно авторизации Spotify в браузере")
+        if not quiet:
+            print("Если браузер не открылся, перейдите по этой ссылке:\n" + url, flush=True)
         webbrowser.open(url, new=2)
 
 
@@ -97,7 +101,9 @@ def parser():
     value.add_argument("--demo", action="store_true", help="offline UI preview without account or audio")
     value.add_argument("--qr", action="store_true", help="use QR/manual callback for first-run sign-in")
     value.add_argument("--ascii", action="store_true", help="portable ASCII artwork and borders")
-    value.add_argument("--no-splash", action="store_true", help="skip the two-second dotted splash")
+    value.add_argument("--no-splash", action="store_true", help="skip the startup system-info screen")
+    value.add_argument("--no-motion", action="store_true", help="disable startup and interface transitions")
+    value.add_argument("--low-power", action="store_true", help="reduce UI refresh rate and skip transitions")
     value.add_argument("--muted", action="store_true", help="start the integrated engine at zero volume")
     value.add_argument(
         "--device", default="auto", help="auto, integrated, or a Spotify Connect device name/ID"
@@ -224,11 +230,21 @@ def run(args):
             if selected:
                 print("Spotify Connect:", selected["name"], flush=True)
 
+            show_startup = not args.no_splash and not args.qr
+            startup_status = ["Загружаем клиент Spotify…"]
+
+            def update_startup_status(message):
+                startup_status[0] = message
+
             def create_backend():
                 return Backend(
                     muted=args.muted,
                     on_authorize=lambda url: engine_authorize(
-                        url, qr=args.qr, ready=lambda: api.backend.ready()
+                        url,
+                        qr=args.qr,
+                        ready=lambda: api.backend.ready(),
+                        quiet=show_startup,
+                        status=update_startup_status,
                     ),
                 )
 
@@ -237,28 +253,72 @@ def run(args):
             if not api.external:
                 backend = Backend(
                     muted=args.muted,
-                    on_authorize=lambda url: engine_authorize(url, qr=args.qr, ready=lambda: backend.ready()),
+                    on_authorize=lambda url: engine_authorize(
+                        url,
+                        qr=args.qr,
+                        ready=lambda: backend.ready(),
+                        quiet=show_startup,
+                        status=update_startup_status,
+                    ),
                 )
                 api.backend = backend
-                print("Подключаю Spotify. Первый запуск может занять несколько секунд…", flush=True)
-                backend.start()
-                # Start silent, pause locally, then restore the preference while paused.
-                # The boot mute is not the user's saved volume.
-                if not getattr(backend, "local_enabled", False):
-                    try:
-                        if getattr(backend, "device_id", None):
-                            api.request("PUT", "me/player/pause?" + api.device_query())
-                    except SpotifyError:
-                        pass
-            api._restore_gate = time.monotonic()
+
+            def start_spotify():
+                if backend:
+                    if not show_startup:
+                        print("Подключаю Spotify. Первый запуск может занять несколько секунд…", flush=True)
+                    backend.start(quiet=show_startup)
+                    # Start silent, pause locally, then restore the preference while paused.
+                    # The boot mute is not the user's saved volume.
+                    if not getattr(backend, "local_enabled", False):
+                        try:
+                            if getattr(backend, "device_id", None):
+                                api.request("PUT", "me/player/pause?" + api.device_query())
+                        except SpotifyError:
+                            pass
+                api._restore_gate = time.monotonic()
             # Import curses only for the UI: doctor, installation and OAuth work without a TTY.
-            import curses
+            # On Windows use the direct-VT backend so the terminal background
+            # (including transparency/acrylic) remains visible.
+            from . import _vt
+            curses = _vt.select()
             from . import ui
 
             ui.API = api
             ui.ASCII_ONLY = args.ascii
-            ui.NO_SPLASH = args.no_splash
-            curses.wrapper(lambda screen: ui.App(screen).run())
+            ui.NO_SPLASH = not show_startup
+            ui.NO_MOTION = args.no_motion or os.environ.get("TSPOTIFY_REDUCED_MOTION", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            ui.LOW_POWER = args.low_power or os.environ.get("TSPOTIFY_LOW_POWER", "").lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            if show_startup:
+                startup_error = []
+
+                def launch(screen):
+                    error = ui.startup_screen(
+                        screen,
+                        start_spotify,
+                        status=lambda: startup_status[0],
+                        cancel=backend.close if backend else None,
+                    )
+                    if error:
+                        startup_error.append(error)
+                        return
+                    ui.NO_SPLASH = True
+                    ui.App(screen).run()
+
+                curses.wrapper(launch)
+                if startup_error:
+                    raise startup_error[0]
+            else:
+                start_spotify()
+                curses.wrapper(lambda screen: ui.App(screen).run())
     finally:
         # Stop our own stream even when an exception or Ctrl+C closes the interface.
         # An already-running desktop Spotify is a separate, user-owned device.

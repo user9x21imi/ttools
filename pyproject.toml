@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ttools"
-version = "1.1.0.dev2"
+version = "1.1.0.dev4"
 description = "Animated terminal launcher for your tools"
 requires-python = ">=3.11"
 dependencies = ["windows-curses>=2.4; sys_platform == 'win32'"]
@@ -20,3 +20,7 @@ ttools = "ttools.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["ttools*"]
+
+[tool.pytest.ini_options]
+norecursedirs = ["runtime", ".venv"]
+

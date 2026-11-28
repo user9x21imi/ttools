@@ -219,21 +219,91 @@ def test_integrated_start_uses_reachable_ap_port_and_keeps_boot_silent(monkeypat
 
     backend = Backend(muted=True)
     calls = []
-    monkeypatch.setattr(module, "engine_path", lambda: "/fake/spotify_player")
+    monkeypatch.setattr(module, "engine_path", lambda **kwargs: "/fake/spotify_player")
     monkeypatch.setattr(
         module.subprocess, "Popen", lambda *args, **kwargs: SimpleNamespace(poll=lambda: None)
     )
     monkeypatch.setattr(backend, "_read", lambda: None)
     monkeypatch.setattr(backend, "_events", lambda: None)
-    monkeypatch.setattr(backend, "ready", lambda: True)
+    readiness = iter([False, True])
+    monkeypatch.setattr(backend, "ready", lambda: next(readiness, True))
     monkeypatch.setattr(backend, "request", lambda *args, **kw: {"protocol": 1})
     monkeypatch.setattr(backend, "local_control", lambda *args: calls.append(args))
     try:
         backend.start()
         config = (paths.BACKEND_CONFIG / "app.toml").read_text()
         assert "ap_port = 443" in config
+        assert "custom_queue = false" in config
         assert "volume = 0" in config
         assert calls == [("pause",), ("volume", 0)]
     finally:
         if backend.master is not None:
             os.close(backend.master)
+
+
+def test_start_never_takes_over_another_running_engine(monkeypatch):
+    backend = Backend()
+    monkeypatch.setattr(backend, "ready", lambda: True)
+    monkeypatch.setattr(backend, "local_control", lambda *a: pytest.fail("Must not change another engine"))
+    with pytest.raises(RuntimeError, match="уже занят"):
+        backend.start()
+
+
+def test_native_snapshot_is_authoritative_and_mode_events_do_not_reset_clock(monkeypatch):
+    backend = Backend(muted=True)
+    backend.native_state = True
+    stamp = int(time.time() * 1000) - 1000
+    snapshot = {
+        "device_id": "native",
+        "track_uri": "spotify:track:chosen",
+        "position_ms": 2000,
+        "position_at_ms": stamp,
+        "is_playing": True,
+        "repeat_state": "track",
+        "shuffle_state": True,
+    }
+    monkeypatch.setattr(backend, "request", lambda *a, **kw: dict(snapshot))
+    value = backend.playback({"item": {"id": "old"}, "repeat_state": "off"})
+    anchor = backend.event["at"]
+    assert value["_pending_track_id"] == "chosen" and value["item"] is None
+    assert 2900 < value["progress_ms"] < 3500
+    assert value["repeat_state"] == "track" and value["shuffle_state"] is True
+    snapshot.update(event_at_ms=stamp + 900, shuffle_state=False, seek_revision=1)
+    value = backend.playback({"item": {"id": "chosen"}})
+    assert backend.event["at"] == anchor
+    assert value["shuffle_state"] is False and value["native_seek_revision"] == 1
+
+
+def test_native_paused_position_does_not_advance(monkeypatch):
+    backend = Backend(muted=True)
+    backend.native_state = True
+    monkeypatch.setattr(
+        backend,
+        "request",
+        lambda *a, **kw: {
+            "track_uri": "spotify:track:chosen",
+            "position_ms": 2500,
+            "position_at_ms": int(time.time() * 1000) - 30000,
+            "is_playing": False,
+        },
+    )
+    assert backend.playback({})["progress_ms"] == 2500
+
+
+def test_next_track_follows_native_shuffle_order_and_repeat_mode(monkeypatch):
+    backend = Backend(muted=True)
+    backend.native_state = True
+    snapshot = {
+        "track_uri": "spotify:track:current",
+        "is_playing": True,
+        "position_at_ms": int(time.time() * 1000),
+        "next_uris": ["spotify:track:shuffled"],
+        "queue_current_uri": "spotify:track:current",
+    }
+    monkeypatch.setattr(backend, "request", lambda *a, **kw: dict(snapshot))
+    assert backend.playback({})["next_track_id"] == "shuffled"
+    snapshot["repeat_state"] = "track"
+    assert backend.playback({})["next_track_id"] == "current"
+    snapshot.update(queue_ended=True, queue_current_uri="spotify:track:first")
+    state = backend.playback({})
+    assert state["queue_ended"] and state["next_track_id"] == "first"

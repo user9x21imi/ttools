@@ -65,6 +65,19 @@ def app(monkeypatch):
         start_context=record("start_context", "playing"),
         control=record("control", "done"),
         context=record("context", {"name": "Mix", "tracks": [track], "context_uri": "spotify:playlist:p"}),
+        artist_profile=record(
+            "artist_profile",
+            {
+                "artist": {"id": "ar", "name": "Artist", "images": [], "genres": ["ambient"]},
+                "releases": {
+                    "album": [{"id": "al", "name": "Album", "album_type": "album", "release_date": "2024", "total_tracks": 8}],
+                    "single": [{"id": "si", "name": "Single", "album_type": "single", "release_date": "2025", "total_tracks": 2}],
+                    "appears_on": [{"id": "ap", "name": "Appears On", "album_type": "compilation", "release_date": "2023"}],
+                    "compilation": [],
+                },
+                "catalog_label": "Доступный каталог релизов",
+            },
+        ),
         toggle_favorite=record("favorite", False),
         library=lambda section: (
             section,
@@ -82,6 +95,8 @@ def app(monkeypatch):
     value.playback = {"item": track, "device": {"volume_percent": 0}}
     value.test_calls = calls
     yield value
+    value.search_pool.shutdown(wait=True, cancel_futures=True)
+    value.state_pool.shutdown(wait=True, cancel_futures=True)
     value.transport_pool.shutdown(wait=True, cancel_futures=True)
     value.pool.shutdown(wait=True, cancel_futures=True)
     value.art_pool.shutdown(wait=True, cancel_futures=True)
@@ -120,7 +135,7 @@ def test_search_focus_unicode_query_and_results(app):
     app.key("Музыка")
     app.key("\n")
     settle(app)
-    assert app.test_calls[-1] == ("search", ("Музыка",))
+    assert app.test_calls[-1] == ("search", ("Музыка", "all", 0))
     assert app.items[0][0] == "track"
     app.key("\t")
     assert app.editing
@@ -331,17 +346,265 @@ def test_discovery_sections_are_available_from_number_keys(app, key, section):
 @pytest.mark.parametrize("size", [(24, 80), (48, 140), (70, 180)])
 def test_fullscreen_artwork_metadata_spectrum_and_return(app, size):
     app.s.size = size
+    app.motion_enabled = False
     selected = app.selected
     app.key(curses.KEY_F3)
     assert app.fullscreen
     app.art = [[(150, 180, 200)] * 32 for _ in range(32)]
     app.render()
+    rendered = "".join(cell.glyph for row in app._last_grid.cells for cell in row)
     assert any("NOW PLAYING" in text for _, _, text in app.s.calls)
+    assert "F3 EXIT" in rendered, (ui.__file__, app.fullscreen, rendered[:100])
     assert any("Track" in text for _, _, text in app.s.calls)
     assert app.spectrum_area[2] > 0
     app.animate()
+    app.s.calls.clear()
     app.key("\x1b")
     assert not app.fullscreen and app.selected == selected
+    app.render()
+    rendered = "".join(cell.glyph for row in app._last_grid.cells for cell in row)
+    assert "F3 PLAYER" in rendered
+
+
+@pytest.mark.parametrize("size", [(24, 80), (40, 120), (50, 180)])
+@pytest.mark.parametrize("fullscreen", [False, True])
+def test_editorial_screens_fit_reference_terminal_sizes(app, size, fullscreen):
+    app.s.size = size
+    app.fullscreen = fullscreen
+    app.playback["item"].update(
+        name="A Very Long Song Title That Must Not Break The Layout",
+        artists=[{"name": "An Artist With A Long Name"}],
+        album={"name": "An Even Longer Album Name"},
+        duration_ms=240000,
+    )
+    app.art = [[(150, 180, 200)] * 32 for _ in range(32)]
+    app.render()
+    grid = app._last_grid
+    assert (grid.height, grid.width) == size
+    if fullscreen:
+        assert app.progress_area and app.spectrum_area
+        assert any(text == "NOW PLAYING" for _, _, text in app.s.calls)
+    else:
+        assert any(hit[4:] == ("panel", "library") for hit in app.hits)
+        assert any(hit[4:] == ("panel", "player") for hit in app.hits)
+
+
+def test_terminal_write_preserves_combining_marks_after_cell_width_fitting(app):
+    app.put(2, 2, "e\u0301cho", width=8)
+    assert app.s.calls[-1][2] == "e\u0301cho"
+
+
+def test_album_transition_retargets_from_current_dither_frame_without_api_work(app):
+    app.render()
+    old = [[(0, 0, 0)] * 8 for _ in range(8)]
+    middle = [[(80, 80, 80)] * 8 for _ in range(8)]
+    newest = [[(255, 255, 255)] * 8 for _ in range(8)]
+    app.set_art(old, animate=False)
+    app.set_art(middle, now=1.0)
+    frame = app.visual_art(now=1.14)
+    before = list(app.test_calls)
+    app.set_art(newest, now=1.14)
+    assert app.art_transition == (frame, 1.14, 0.28)
+    for _ in range(3):
+        app.render()
+    assert app.test_calls == before
+
+
+def test_library_selection_moves_immediately_and_retargets_inside_100ms(app):
+    app.items = [("track", {"id": "one"}), ("track", {"id": "two"})]
+    app.selected = 0
+    app.begin_selection(1, now=10.0)
+    assert app.selected == 1
+    assert 0 < app.selection_position(now=10.05) < 1
+    app.begin_selection(0, now=10.05)
+    assert app.selection_transition[0] == app.selection_position(now=10.05)
+    assert app.selection_transition[1:] == (0.0, 10.05, 0.1)
+
+
+def test_motion_preferences_skip_all_short_transitions(app):
+    app.motion_enabled = False
+    app.items = [
+        ("track", {"id": "one"}),
+        ("track", {"id": "two"}),
+    ]
+    app.selected = 0
+    app.render()
+    app.begin_panel_transition(now=1.0)
+    app.begin_selection(1, now=1.0)
+    old = [[(0, 0, 0)]]
+    app.set_art(old, animate=False)
+    app.set_art([[(255, 255, 255)]])
+    assert app.panel_transition is None
+    assert app.selection_transition is None
+    assert app.art_transition is None
+
+
+def test_low_power_mode_skips_transitions_and_keeps_real_spectrum_status(app):
+    app.low_power = True
+    app.motion_enabled = True
+    app.render()
+    app.begin_panel_transition(now=1.0)
+    app.set_art([[(0, 0, 0)]], animate=False)
+    app.set_art([[(255, 255, 255)]])
+    app.audio.enabled = False
+    app.audio.status = "capture unavailable"
+    app.fullscreen = True
+    app.render()
+    assert app.panel_transition is None and app.art_transition is None
+    assert any("capture unavailable" in text for _, _, text in app.s.calls)
+
+
+def test_volume_change_shows_a_short_feedback_indicator(app):
+    app.volume = 35
+    app.set_volume(40)
+    app.render()
+    assert app._volume_feedback_visible
+    assert any("VOLUME" in text for _, _, text in app.s.calls)
+
+
+def test_transition_frames_keep_progress_source_and_selected_track_state(app):
+    app.playback.update(progress_ms=62000, is_playing=True)
+    app.updated = time.monotonic() - 1
+    app.fullscreen = True
+    app.render()
+    original_position = app.playback["progress_ms"]
+    app.begin_panel_transition()
+    app.render()
+    app.animate()
+    assert app.playback["progress_ms"] == original_position
+    assert app.playback["item"]["id"] == "t"
+
+
+def test_panel_transition_only_redraws_cells_that_changed(app):
+    app.render()
+    height, width = app.s.size
+    app.s.calls.clear()
+    app.key(curses.KEY_F3)
+    app.render()
+    assert app._display_grid != app._last_grid
+    assert 0 < len(app.s.calls) < height * width // 2
+
+
+@pytest.mark.parametrize("size", [(24, 80), (40, 120), (50, 180)])
+def test_motion_enabled_f3_entry_and_exit_render_intermediate_frames(app, size):
+    def cells(grid):
+        return [[cell for cell in row] for row in grid.cells]
+
+    app.s.size = size
+    app.motion_enabled = True
+    app.low_power = False
+    app.render()
+    base = time.monotonic() + 10
+    source = app._display_grid.clone()
+    app.key(curses.KEY_F3)
+    app.panel_transition = (source, base, 0.21)
+    app.render()
+    entrance_start = app._display_grid.clone()
+    app._finish_render(now=base + 0.105)
+    entrance_middle = app._display_grid.clone()
+    app._finish_render(now=base + 0.22)
+    entrance_end = app._display_grid.clone()
+    assert cells(entrance_start) == cells(source)
+    assert cells(entrance_middle) != cells(entrance_start) and cells(entrance_middle) != cells(entrance_end)
+    assert app.fullscreen and app.spectrum_area
+
+    exit_base = base + 1
+    app.key(curses.KEY_F3)
+    exit_source = app._display_grid.clone()
+    app.panel_transition = (exit_source, exit_base, 0.21)
+    app.render()
+    exit_start = app._display_grid.clone()
+    app._finish_render(now=exit_base + 0.105)
+    exit_middle = app._display_grid.clone()
+    app.items.append(("playlist", {"id": "p2", "name": "Second Playlist"}))
+    app.key(curses.KEY_DOWN)
+    assert app.selected == 1
+    app._finish_render(now=exit_base + 0.22)
+    exit_end = app._display_grid.clone()
+    assert cells(exit_start) == cells(exit_source)
+    assert cells(exit_middle) != cells(exit_start) and cells(exit_middle) != cells(exit_end)
+    assert not app.fullscreen
+
+
+def test_artist_search_opens_profile_and_album_back_restores_artist_selection(app):
+    artist = {"id": "ar", "name": "Artist", "images": []}
+    track = {"id": "t", "name": "Track", "type": "track", "artists": [{"name": "Artist"}]}
+    app.section = "Поиск: Artist"
+    app.query = "Artist"
+    app.search_layout = True
+    app.search_suspended = False
+    app.items = [("track", track), ("artist", artist)]
+    app.selected = 1
+
+    app.key("\n")
+    settle(app)
+    assert app.section == "ARTIST / Artist"
+    assert app.artist_profile and app.items[0][1]["id"] == "al"
+    app.select_artist_group("single")
+    assert app.items[0][1]["id"] == "si"
+    app.key("\n")
+    settle(app)
+    assert app.section == "Mix"
+    app.key("\n")
+    settle(app)
+    assert app.test_calls[-1][0] == "start"
+    app.key(curses.KEY_LEFT)
+    assert app.section == "ARTIST / Artist"
+    assert app.artist_group == "single" and app.selected == 0
+    app.key(curses.KEY_LEFT)
+    assert app.section == "Поиск: Artist" and app.selected == 1
+    assert app.query == "Artist" and app.search_layout
+
+
+def test_search_category_and_pagination_are_keyboard_accessible(app):
+    app.search_layout = True
+    app.search_suspended = False
+    app.query = app.search_query = "Artist"
+    app.search_paging["artist"] = {"next": "next"}
+    app.key("2")
+    assert app.search_category == "artist"
+    app.key("n")
+    settle(app)
+    assert app.test_calls[-1] == ("search", ("Artist", "artist", 10))
+
+
+def test_artist_page_is_reached_from_now_playing_hotkey(app):
+    app.playback["item"]["artists"] = [{"id": "ar", "name": "Artist"}]
+    app.key("g")
+    settle(app)
+    assert app.artist_profile and app.section == "ARTIST / Artist"
+
+
+def test_same_name_artist_search_results_keep_distinct_ids_and_metadata(app, monkeypatch):
+    results = [
+        {"id": "aaaaaaartist1", "name": "The Same Name", "genres": ["ambient"]},
+        {"id": "bbbbbbartist2", "name": "The Same Name", "genres": ["jazz"]},
+    ]
+    monkeypatch.setattr(ui.API, "search", lambda query, category, offset: {"artists": results, "_paging": {}})
+    app.key("/")
+    app.query = "The Same Name"
+    app.schedule_search()
+    app.dispatch_search()
+    settle(app)
+    app.select_search_category("artist")
+    assert [item["id"] for _, item in app.items] == ["aaaaaaartist1", "bbbbbbartist2"]
+    app.render()
+    rendered = "\n".join("".join(cell.glyph for cell in row) for row in app._last_grid.cells)
+    assert "ambient · ID aaaaaa" in rendered
+    assert "jazz · ID bbbbbb" in rendered
+
+
+def test_live_frame_writes_resume_after_panel_transition_completes(app):
+    app.render()
+    app.key(curses.KEY_F3)
+    app.render()
+    source, _, duration = app.panel_transition
+    app.panel_transition = (source, time.monotonic() - duration, duration)
+    app.render()
+    assert app.panel_transition is None and not app._suppress_direct
+    app.s.calls.clear()
+    app.animate()
+    assert app.s.calls
 
 
 def mouse_at(app, monkeypatch, x, y, state):
@@ -375,9 +638,9 @@ def test_mouse_can_open_discovery_tab_and_expand_player(app, monkeypatch):
 
 def test_mouse_hover_focuses_panel_without_starting_audio(app, monkeypatch):
     app.render()
-    y, x, *_ = next(hit for hit in app.hits if hit[4:] == ("panel", "search"))
+    y, x, *_ = next(hit for hit in app.hits if hit[4:] == ("panel", "library"))
     mouse_at(app, monkeypatch, x + 1, y + 1, curses.REPORT_MOUSE_POSITION)
-    assert app.focus_panel == "search"
+    assert app.focus_panel == "library"
     assert not app.test_calls
 
 
@@ -822,3 +1085,527 @@ def test_slow_track_start_does_not_block_local_volume(app, monkeypatch):
     finally:
         release.set()
         settle(app)
+
+
+def test_preloaded_cover_is_visible_without_background_job(app, monkeypatch):
+    image = [[(1, 2, 3)]]
+    monkeypatch.setattr(ui, "cached_cover", lambda *args: image)
+    app.track_cover({"album": {"images": [{"url": "https://i.scdn.co/image/preloaded"}]}})
+    assert app.art is image
+    assert "cover" not in app.pending
+
+
+def test_rapid_next_commands_are_not_dropped(app, monkeypatch):
+    import threading
+
+    first, release = threading.Event(), threading.Event()
+    calls = []
+
+    def control(command, value):
+        calls.append(command)
+        if len(calls) == 1:
+            first.set()
+            release.wait(2)
+        return ""
+
+    monkeypatch.setattr(ui.API, "control", control)
+    app.command("playback", "next")
+    assert first.wait(0.5)
+    for _ in range(3):
+        app.command("playback", "next")
+    release.set()
+    settle(app)
+    assert calls == ["next"] * 4
+
+
+def test_transport_works_while_track_confirmation_is_pending(app):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def start():
+        started.set()
+        release.wait(2)
+        return ""
+
+    app.submit("command", start)
+    assert started.wait(0.5)
+    try:
+        app.command("playback", "next")
+        deadline = time.monotonic() + 0.5
+        while not app.test_calls and time.monotonic() < deadline:
+            time.sleep(0.001)
+        assert ("control", ("next", None)) in app.test_calls
+    finally:
+        release.set()
+        settle(app)
+
+
+def test_selected_track_metadata_is_shown_before_slow_start_finishes(app, monkeypatch):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def slow_start(item):
+        started.set()
+        release.wait(2)
+        return ""
+
+    monkeypatch.setattr(ui.API, "start", slow_start)
+    selected = {"id": "new", "name": "Selected", "duration_ms": 180000}
+    app.start_track(selected)
+    try:
+        assert started.wait(0.5)
+        assert app.playback["item"]["id"] == "new"
+        assert app.playback["is_loading"]
+        assert not app.playback["is_playing"]
+    finally:
+        release.set()
+        settle(app)
+
+
+def test_search_suggests_after_typing_without_enter(app, monkeypatch):
+    now = [time.monotonic()]
+    monkeypatch.setattr(ui.time, "monotonic", lambda: now[0])
+    app.key("/")
+    for letter in "abc":
+        app.key(letter)
+        app.update_live_search()
+    assert not app.test_calls
+    now[0] += 0.2
+    app.update_live_search()
+    settle(app)
+    assert ("search", ("abc", "all", 0)) in app.test_calls
+    assert app.editing
+    assert app.section == "Поиск: abc"
+    app.key(curses.KEY_DOWN)
+    assert not app.editing
+
+
+def test_old_search_reply_cannot_replace_new_query(app):
+    settle(app)
+    app.query = "new"
+    app.section = "Поиск: new"
+    app.items = [("track", {"id": "keep"})]
+    app.events.put(("search", {"_query": "old", "_results": {"tracks": [{"id": "stale"}]}}, None))
+    app.drain()
+    assert app.items[0][1]["id"] == "keep"
+    assert app.search_due
+
+
+def test_search_rows_include_thumbnail_author_album_and_duration(app):
+    app.section = "Поиск: example"
+    app.items = [
+        (
+            "track",
+            {
+                "id": "search-row",
+                "name": "Song",
+                "artists": [{"name": "Author"}],
+                "album": {"name": "Album"},
+                "duration_ms": 245000,
+            },
+        )
+    ]
+    app.render_library(25, 140, 15)
+    text = [value for _, _, value in app.s.calls]
+    assert all(value in text for value in ("Song", "Author", "Album", "4:05"))
+    assert any(hit[2] == 3 and hit[4] == "row" for hit in app.hits)
+    settle(app)
+
+
+def test_library_suggestions_are_immediate_before_network_search(app):
+    app.saved_tracks = {
+        "spotify:track:local": {
+            "id": "local",
+            "name": "Local Song",
+            "artists": [{"name": "Artist"}],
+            "album": {"name": "Album"},
+            "duration_ms": 100000,
+        }
+    }
+    app.query = "Local"
+    app.schedule_search()
+    assert app.items[0][1]["id"] == "local"
+    assert not app.test_calls
+    assert "search" not in app.pending
+
+
+def test_old_play_confirmation_never_labels_new_track_in_footer(app):
+    settle(app)
+    app.playback = {"item": {"id": "new", "name": "Current"}, "is_playing": True}
+    app.events.put(("command", "Воспроизводится: Old song", None))
+    app.drain()
+    assert "Old song" not in app.notice
+
+
+def test_confirmed_playback_clears_obsolete_reconnect_notice(app):
+    settle(app)
+    app.notice = "Переподключаю встроенный Spotify (1/2)…"
+    app.events.put(("poll", {"item": {"id": "playing"}, "is_playing": True}, None))
+    app.drain()
+    assert not app.notice
+
+
+def test_remote_search_enriches_local_card_without_moving_selection(app):
+    settle(app)
+    app.query = "Song"
+    app.section = "Поиск: Song"
+    app.items = [("track", {"id": "a", "name": "Song A"}), ("track", {"id": "b", "name": "Song B"})]
+    app.selected = 1
+    app.thumbnails["track:b"] = []
+    album = {"name": "Album B", "images": [{"url": "https://i.scdn.co/image/search-b"}]}
+    app.events.put(
+        (
+            "search",
+            {
+                "_query": "Song",
+                "_results": {
+                    "tracks": [{"id": "b", "name": "Song B", "album": album, "duration_ms": 120000}]
+                },
+            },
+            None,
+        )
+    )
+    app.drain()
+    assert app.selected == 1
+    assert len(app.items) == 2
+    assert app.items[1][1]["album"] == album
+    assert "track:b" not in app.thumbnails
+
+
+def test_search_temporarily_reorders_panels_without_changing_saved_layout(app):
+    settle(app)
+    configured = ["spectrum", "library", "player", "search"]
+    app.order = configured.copy()
+    app.save_layout()
+    before = ui.CONFIG.read_bytes()
+    app.key("/")
+    app.render()
+    panels = {hit[5]: hit for hit in app.hits if hit[4] == "panel"}
+    assert panels["search"][0] < panels["library"][0] < panels["player"][0] < panels["spectrum"][0]
+    assert panels["library"][2] > panels["player"][2] + panels["spectrum"][2]
+    assert any("LIBRARY" in text for _, _, text in app.s.calls)
+    app.key("\t")
+    assert app.search_layout and not app.editing
+    app.key("\x1b")
+    app.render()
+    panels = {hit[5]: hit for hit in app.hits if hit[4] == "panel"}
+    assert sorted(panels, key=lambda name: panels[name][0]) == [
+        name for name in configured if name != "search"
+    ]
+    assert app.order == configured
+    assert ui.CONFIG.read_bytes() == before
+
+
+def test_mouse_focus_on_now_playing_restores_normal_layout(app, monkeypatch):
+    app.key("/")
+    app.render()
+    player = next(hit for hit in app.hits if hit[4:] == ("panel", "player"))
+    monkeypatch.setattr(curses, "getmouse", lambda: (0, 2, player[0] + 1, 0, curses.REPORT_MOUSE_POSITION))
+    app.mouse()
+    assert not app.search_layout
+    assert app.focus_panel == "player"
+    assert not app.editing
+
+
+@pytest.mark.parametrize("size", [(24, 78), (30, 90), (48, 140)])
+def test_search_results_and_compact_player_fit_terminal(app, size):
+    app.s.size = size
+    app.key("/")
+    app.query = "tom"
+    app.schedule_search()
+    app.render()
+    panels = [hit for hit in app.hits if hit[4] == "panel"]
+    assert all(y + height <= size[0] - 5 for y, _, height, _, _, _ in panels)
+    assert next(hit[2] for hit in panels if hit[5] == "library") >= 5
+
+
+def test_search_reply_after_returning_to_player_cannot_reopen_search(app):
+    settle(app)
+    app.key("/")
+    app.query = "tom"
+    app.schedule_search()
+    app.leave_search_layout()
+    current = list(app.items)
+    app.events.put(
+        ("search", {"_query": "tom", "_results": {"tracks": [{"id": "late", "name": "Late"}]}}, None)
+    )
+    app.drain()
+    assert not app.search_layout
+    assert app.items == current
+
+
+def open_filter_context(app, kind="playlist"):
+    settle(app)
+    tracks = [
+        {"id": "a" * 22, "name": "First", "artists": [{"name": "Alice"}], "album": {"name": "One"}},
+        {"id": "b" * 22, "name": "Second", "artists": [{"name": "Bob"}], "album": {"name": "Two"}},
+        {"id": "c" * 22, "name": "Last", "artists": [{"name": "Alice"}], "album": {"name": "Three"}},
+    ]
+    app.events.put(
+        ("open", {"name": "Collection", "tracks": tracks, "context_uri": f"spotify:{kind}:collection"}, None)
+    )
+    app.drain()
+    return tracks
+
+
+@pytest.mark.parametrize("kind", ["playlist", "album"])
+def test_search_inside_collection_filters_without_spotify_request(app, kind):
+    tracks = open_filter_context(app, kind)
+    app.key("/")
+    for letter in "bob two":
+        app.key(letter)
+    app.update_live_search()
+    assert app.search_scope == "context"
+    assert app.items == [("track", tracks[1])]
+    assert not any(call[0] == "search" for call in app.test_calls)
+    app.query = ""
+    app.schedule_search()
+    assert len(app.items) == 3
+
+
+def test_play_from_filtered_list_preserves_original_playlist_queue(app):
+    tracks = open_filter_context(app)
+    app.key("/")
+    app.query = "second"
+    app.schedule_search()
+    app.key("\n")
+    app.key("\n")
+    settle(app)
+    played = next(args[0] for name, args in app.test_calls if name == "start")
+    assert played["id"] == tracks[1]["id"]
+    assert played["_queue_uris"] == ["spotify:track:" + track["id"] for track in tracks]
+    assert played["_context_uri"] == "spotify:playlist:collection"
+
+
+def test_f2_keeps_global_search_available_inside_playlist(app):
+    open_filter_context(app)
+    app.key("/")
+    app.query = "bob"
+    app.schedule_search()
+    app.key(curses.KEY_F2)
+    assert app.search_scope == "spotify"
+    app.query = "everywhere"
+    app.dispatch_search()
+    settle(app)
+    assert ("search", ("everywhere", "all", 0)) in app.test_calls
+
+
+def test_escape_clears_collection_filter_and_restores_all_tracks(app):
+    open_filter_context(app)
+    app.key("/")
+    app.query = "first"
+    app.schedule_search()
+    assert len(app.items) == 1
+    app.key("\x1b")
+    assert len(app.items) == 3
+    assert not app.query
+    assert not app.search_layout
+
+
+def test_global_reply_cannot_replace_local_playlist_filter(app):
+    open_filter_context(app)
+    app.key("/")
+    app.query = "first"
+    app.schedule_search()
+    app.events.put(("search", {"_query": "first", "_results": {"tracks": [{"id": "outside"}]}}, None))
+    app.drain()
+    assert len(app.items) == 1 and app.items[0][1]["name"] == "First"
+
+
+def test_back_from_global_search_restores_complete_collection(app):
+    open_filter_context(app)
+    app.key("/")
+    app.query = "second"
+    app.schedule_search()
+    app.key(curses.KEY_F2)
+    app.key("\x1b")
+    app.key(curses.KEY_LEFT)
+    assert app.search_scope == "context"
+    assert app.section == "Collection"
+    assert len(app.items) == 3
+    assert app.items[app.selected][1]["name"] == "Second"
+
+
+def test_modes_and_share_are_clickable_in_compact_window(app):
+    app.s.size = (24, 78)
+    app.render()
+    keys = {value for _, _, _, _, action, value in app.hits if action == "key"}
+    assert {"s", "r", "y", "j"} <= keys
+
+
+def test_share_selected_playlist_and_current_track_have_different_links(app, monkeypatch):
+    monkeypatch.setattr(app, "copy_share", lambda: None)
+    app.items = [("playlist", {"id": "mix", "uri": "spotify:playlist:mix", "name": "Mix"})]
+    app.selected = 0
+    app.key("Y")
+    assert app.share_dialog[2] == "https://open.spotify.com/playlist/mix"
+    app.key("\x1b")
+    app.key("y")
+    assert app.share_dialog[2] == "https://open.spotify.com/track/t"
+
+
+@pytest.mark.parametrize("expanded", [False, True])
+def test_share_escape_closes_only_dialog_and_preserves_player(app, monkeypatch, expanded):
+    monkeypatch.setattr(app, "copy_share", lambda: None)
+    app.fullscreen = expanded
+    original_order = list(app.order)
+    original_selected = app.selected
+    app.key("y")
+    app.render()
+    app.key("\x1b")
+    assert app.share_dialog is None
+    assert app.fullscreen is expanded
+    assert app.order == original_order and app.selected == original_selected
+    if expanded:
+        app.key("\x1b")
+        assert not app.fullscreen
+
+
+def test_share_dialog_blocks_background_animation(app, monkeypatch):
+    monkeypatch.setattr(app, "copy_share", lambda: None)
+    app.fullscreen = True
+    app.key("y")
+    app.render()
+    before = list(app.s.calls)
+    app.animate()
+    assert app.s.calls == before
+
+
+def test_share_close_mouse_button_returns_to_fullscreen_player(app, monkeypatch):
+    monkeypatch.setattr(app, "copy_share", lambda: None)
+    app.fullscreen = True
+    app.key("y")
+    app.render()
+    y, x, _, _, _, _ = next(hit for hit in app.hits if hit[4:] == ("key", "\x1b"))
+    monkeypatch.setattr(curses, "getmouse", lambda: (0, x, y, 0, curses.BUTTON1_CLICKED))
+    app.key(curses.KEY_MOUSE)
+    assert app.share_dialog is None and app.fullscreen
+
+
+def test_default_spectrum_is_visible_in_a_compact_80_by_24_terminal(app):
+    app.s.size = (24, 80)
+
+    app.render()
+
+    assert app.spectrum_area is not None
+    assert app.spectrum_area[2] >= 1
+    assert any(hit[4:] == ("panel", "spectrum") for hit in app.hits)
+    assert any("AUDIO / LIVE" in text for _, _, text in app.s.calls)
+
+
+@pytest.mark.parametrize(
+    "size,side_by_side", [((24, 80), False), ((72, 100), True), ((45, 120), True), ((48, 160), True)]
+)
+def test_expanded_layout_adapts_metadata_and_keeps_visualizer_below_timeline(app, size, side_by_side):
+    app.s.size = size
+    app.fullscreen = True
+    app.playback["next_item"] = {"name": "Next song", "artists": [{"name": "Next artist"}]}
+    app.art = [[(150, 180, 200)] * 32 for _ in range(32)]
+    app.render()
+    title = next((y, x) for y, x, text in app.s.calls if text == "Track")
+    sy, sx, sh, sw = app.spectrum_area
+    assert (title[1] >= size[1] // 4) is side_by_side
+    assert sx == 4 and sw == size[1] - 8
+    next_y = next(y for y, x, text in app.s.calls if "Далее: Next artist — Next song" in text)
+    assert next_y < sy
+    keys = {v for _, _, _, _, action, v in app.hits if action == "key"}
+    assert {" ", "n", "p", "s", "r", "y", "j", "+", "-"} <= keys
+    before = [call for call in app.s.calls if call[0] == next_y]
+    app.animate()
+    assert [call for call in app.s.calls if call[0] == next_y] == before
+
+
+def test_expanded_timeline_unfilled_color_matches_animated_frame(app, monkeypatch):
+    app.fullscreen = True
+    app.playback.update(progress_ms=30000, is_playing=False)
+    app.playback["item"]["duration_ms"] = 300000
+    calls = []
+    original = app.put
+
+    def capture(y, x, text, color=1, *args, **kwargs):
+        calls.append((y, x, text, color))
+        original(y, x, text, color, *args, **kwargs)
+
+    monkeypatch.setattr(app, "put", capture)
+    app.render()
+    y, x, width = app.progress_area
+    rendered = [c for c in calls if c[0] == y and c[2].startswith("─")]
+    assert rendered and rendered[-1][3] == 11
+    calls.clear()
+    app.animate()
+    animated = [c for c in calls if c[0] == y and c[2].startswith("─")]
+    assert rendered == animated
+
+
+@pytest.mark.parametrize(
+    "size,wide", [((72, 100), False), ((48, 160), True), ((30, 140), True), ((45, 120), True)]
+)
+def test_main_screen_uses_columns_only_in_wide_windows(app, size, wide):
+    app.s.size = size
+    order = list(app.order)
+    app.render()
+    player = next(hit for hit in app.hits if hit[4:] == ("panel", "player"))
+    library = next(hit for hit in app.hits if hit[4:] == ("panel", "library"))
+    if wide:
+        assert library[1] >= size[1] // 2
+        assert library[0] == player[0]
+        assert player[1] + player[3] < library[1]
+    else:
+        assert library[0] > player[0]
+        assert library[1] == player[1]
+    assert app.order == order
+
+
+def test_wide_library_mouse_hits_use_second_column_coordinates(app, monkeypatch):
+    app.s.size = (48, 160)
+    app.render()
+    row = next(hit for hit in app.hits if hit[4] == "row")
+    assert row[1] >= 80
+    mouse_at(app, monkeypatch, row[1], row[0], curses.BUTTON1_CLICKED)
+    settle(app)
+    assert any(name == "context" for name, _ in app.test_calls)
+
+
+def test_jam_button_creates_session_and_shows_real_invite_at_bottom(app, monkeypatch):
+    monkeypatch.setattr(
+        ui.API,
+        "start_jam",
+        lambda: {"url": "https://spotify.link/actualInvite", "members": [{"name": "Host"}]},
+        raising=False,
+    )
+    app.fullscreen = True
+    app.key("j")
+    settle(app)
+    assert app.share_dialog[2] == "https://spotify.link/actualInvite"
+    app.render()
+    assert any("Копировать" in text for _, _, text in app.s.calls)
+    app.key("\x1b")
+    assert app.share_dialog is None and app.fullscreen
+
+
+def test_jam_error_replaces_loading_dialog(app, monkeypatch):
+    def denied():
+        raise RuntimeError("Denied by Spotify")
+
+    monkeypatch.setattr(ui.API, "start_jam", denied, raising=False)
+    app.key("j")
+    settle(app)
+    assert app.share_dialog[2] == ""
+    assert "Denied by Spotify" in app.share_dialog[1]
+
+
+@pytest.mark.parametrize("size", [(24, 78), (30, 110), (48, 140), (72, 100), (40, 240)])
+@pytest.mark.parametrize("repeat", ["off", "context", "track"])
+def test_shuffle_and_repeat_buttons_remain_visible_after_resize(app, size, repeat):
+    app.fullscreen = True
+    app.s.size = size
+    app.playback.update(repeat_state=repeat, shuffle_state=True)
+    app.render()
+    for key in ("s", "r"):
+        hit = next(hit for hit in app.hits if hit[4:] == ("key", key))
+        assert hit[0] < size[0] and hit[1] + hit[3] < size[1]
+    app.s.size = (48, 160)
+    app.render()
+    assert any(hit[4:] == ("key", "r") for hit in app.hits)

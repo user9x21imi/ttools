@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "apps": [
+    {
+      "id": "tspotify",
+      "name": "tspotify",
+      "version": "0.2.0-dev",
+      "command": [
+        "python",
+        "-m",
+        "tspotify"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\tspotify\\source\\src"
+      },
+      "description": "Music and your library",
+      "repository": "https://github.com/user9x21imi/tspotify",
+      "source_commit": "5c64c3323acf493093c874f971f60a07284c472e",
+      "suite_managed": false
+    },
+    {
+      "id": "tthings",
+      "name": "tthings",
+      "version": "0.7.2-dev",
+      "command": [
+        "python",
+        "-m",
+        "tthings"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\tthings\\source"
+      },
+      "description": "Effects and system tools",
+      "suite_managed": false
+    },
+    {
+      "id": "tsoundcloud",
+      "name": "tsoundcloud",
+      "version": "0.1.0-dev",
+      "command": [
+        "python",
+        "-m",
+        "tsound"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\tsoundcloud\\source"
+      },
+      "description": "SoundCloud and track comments",
+      "suite_managed": false
+    },
+    {
+      "id": "tvpn",
+      "name": "tvpn",
+      "version": "1.4.1-dev",
+      "command": [
+        "python",
+        "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\tvpn\\source\\launch.py"
+      ],
+      "env": {},
+      "description": "Secure connection",
+      "suite_managed": false
+    },
+    {
+      "id": "ttelegram",
+      "name": "ttelegram",
+      "version": "2026.11.18.7-win1-dev",
+      "command": [
+        "python",
+        "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\ttelegram\\windows-native\\manage.py",
+        "launch",
+        "--prefix",
+        "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\ttelegram\\windows-native",
+        "--in-terminal"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\user\\source\\repos\\ttools-integration\\components\\ttelegram\\windows-native\\source"
+      },
+      "description": "Messages and channels",
+      "suite_managed": false
+    }
+  ]
+}

@@ -12,15 +12,36 @@ import tempfile
 import time
 import venv
 
-from .distribution import (REPOSITORY, atomic_json, digest, extract_zip, fetch, locked,
-                           platform_id, prefix_path, read_remote_json, verify_bundle, version_key, configure_text_io)
+from .distribution import (atomic_json, digest, extract_zip, fetch, latest_suite_manifest, locked,
+                           platform_id, prefix_path, verify_bundle, version_key, configure_text_io,
+                           valid_source_commit)
 
 NATIVE_TRAMPOLINE = "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')"
-APP_IDS = ('tspotify','ttelegram','tthings','tvpn')
+APP_IDS = ('tspotify','tsoundcloud','ttelegram','tthings','tvpn')
+# Components that have a real native package for a platform. SoundCloud has no
+# Windows build, so it is excluded from the standard Windows installation.
+WINDOWS_COMPONENTS = ('tspotify','ttelegram','tthings','tvpn')
+UNSUPPORTED_BY_PLATFORM = {'windows-x86_64': ('tsoundcloud',)}
+
+def supported_components(target_platform):
+    """APP_IDS minus components with no native package for target_platform."""
+    blocked = set(UNSUPPORTED_BY_PLATFORM.get(target_platform, ()))
+    return [a for a in APP_IDS if a not in blocked]
+
+def default_components(target_platform=None):
+    """Default component selection; on Windows never include unsupported apps."""
+    if target_platform is None:
+        target_platform = platform_id()
+    return supported_components(target_platform)
 
 def run(argv, **kwargs):
     print('+ '+ ' '.join(map(str,argv)),flush=True)
     subprocess.run(list(map(str,argv)),check=True,**kwargs)
+
+def powershell_exe():
+    """Prefer PowerShell 7+; fall back to in-box Windows PowerShell 5.1."""
+    if os.name!='nt':return 'powershell.exe'
+    return shutil.which('pwsh.exe') or shutil.which('pwsh') or shutil.which('powershell.exe') or 'powershell.exe'
 
 def python_in(directory):
     return directory/('Scripts/python.exe' if os.name=='nt' else 'bin/python')
@@ -38,6 +59,7 @@ def plan(bundle, target_platform, selected, allow_partial=False):
     for app in selected:
         if app not in APP_IDS:raise ValueError(f'Unknown component: {app}')
         if app=='ttelegram' and target_platform!='linux-x86_64' and not (target_platform=='windows-x86_64' and (bundle/'components/ttelegram/windows-native/app.json').is_file()):unsupported.append(app)
+        if app=='tsoundcloud' and target_platform!='linux-x86_64':unsupported.append(app)
         if app=='tvpn' and target_platform not in ('linux-x86_64','macos-arm64','macos-x86_64','windows-x86_64'):unsupported.append(app)
     if unsupported and not allow_partial:
         raise RuntimeError(f'{target_platform}: no supported package for {", ".join(unsupported)}. Полный комплект для этой ОС пока недоступен; --allow-partial разрешает явно неполную установку.')
@@ -100,6 +122,10 @@ def install_component(app,release,defer_system=False):
         command=[str(py),str(entry)]
         run([*command,'--version'])
         return command,env
+    if app=='tsoundcloud':
+        command=[sys.executable,bundle/'launch.py']
+        run([*command,'--version'])
+        return command,env
     if app=='tvpn':
         if sys.platform=='linux':
             command=[sys.executable,source/'install.py','--prefix',dest,'--no-launch']
@@ -114,13 +140,13 @@ def install_component(app,release,defer_system=False):
             if os.name=='nt':
                 setup=dest/'platforms/windows/install.ps1'
                 # Setup dependencies and UAC are handled by a purpose-built local script.
-                run(['powershell.exe','-NoProfile','-File',str(release/'scripts/setup-vpn-windows.ps1'),'-Setup',str(setup)])
+                run([powershell_exe(),'-NoProfile','-File',str(release/'scripts/setup-vpn-windows.ps1'),'-Setup',str(setup)])
             else:
                 run(['bash',str(dest/'platforms/macos/install.sh')])
         return [str(py),str(dest/'launch.py')],env
     raise ValueError(app)
 
-def _write_shortcuts(prefix,shortcuts=True):
+def _write_shortcuts(prefix,shortcuts=True,components=APP_IDS):
     root=Path(__file__).resolve().parents[1]
     runner=prefix/'runner.py'
     runner.write_text('''import json,os,sys
@@ -141,20 +167,22 @@ except (OSError,ValueError,RuntimeError) as error:
     if not shortcuts:return
     if os.name=='nt':
         commands=prefix/'bin';commands.mkdir(exist_ok=True)
-        for app in ('ttools',*APP_IDS):
+        for app in ('ttools',*components):
             args='' if app=='ttools' else '--app '+app+' '
-            (commands/(app+'.cmd')).write_text('@echo off\r\nchcp 65001 >nul\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
+            (commands/(app+'.cmd')).write_text('@echo off\r\nchcp 65001 >nul\r\nset "PYTHONUTF8=1"\r\nset "PYTHONIOENCODING=utf-8"\r\n"'+sys.executable+'" "'+str(runner)+'" '+args+'%*\r\n',encoding='utf-8')
         # Update the user PATH, never the system PATH.
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,'Environment',0,winreg.KEY_READ|winreg.KEY_WRITE) as key:
             try:value,_=winreg.QueryValueEx(key,'Path')
             except FileNotFoundError:value=''
-            if str(commands).casefold() not in [x.casefold() for x in value.split(';')]:
-                winreg.SetValueEx(key,'Path',0,winreg.REG_EXPAND_SZ,value.rstrip(';')+';'+str(commands))
+            parts=[x for x in value.split(';') if x.strip()]
+            if str(commands).casefold() not in [x.casefold() for x in parts]:
+                parts.append(str(commands))
+                winreg.SetValueEx(key,'Path',0,winreg.REG_EXPAND_SZ,';'.join(parts))
     else:
         import shlex
         commands=Path.home()/'.local/bin';commands.mkdir(parents=True,exist_ok=True)
-        for app in ('ttools',*APP_IDS):
+        for app in ('ttools',*components):
             args='' if app=='ttools' else '--app '+app+' '
             wrapper=commands/app
             wrapper.write_text('#!/bin/sh\nexec '+shlex.quote(sys.executable)+' '+shlex.quote(str(runner))+' '+args+'"$@"\n')
@@ -210,6 +238,43 @@ def stop_previous_background_apps(state):
             run([sys.executable,dest/'manage.py','stop','--timeout','30'],env=env)
 
 
+def configure_tvpn_system(release,target):
+    """Apply the versioned TVPN system integration only after suite activation."""
+    release=Path(release)
+    dest=release/'apps/tvpn'
+    if target=='linux-x86_64':
+        run(['bash',dest/'install-passwordless.sh'])
+    elif target.startswith('macos-'):
+        run(['bash',dest/'platforms/macos/install.sh'])
+    elif target=='windows-x86_64':
+        run([powershell_exe(),'-NoProfile','-File',release/'scripts/setup-vpn-windows.ps1',
+             '-Setup',dest/'platforms/windows/install.ps1'])
+    else:
+        raise RuntimeError(f'No TVPN system setup for {target}')
+
+
+def _validate_release_state(prefix,state):
+    """Validate a versioned suite pointer before it can become active again."""
+    releases=(prefix/'releases').resolve()
+    try:
+        release=Path(state['release']).resolve()
+        if not release.is_relative_to(releases):
+            raise ValueError
+        manifest=json.loads((release/'bundle.json').read_text(encoding='utf-8'))
+    except (KeyError,OSError,ValueError,TypeError) as error:
+        raise RuntimeError('Suite release metadata is missing or outside the managed prefix') from error
+    if (manifest.get('app_id')!='ttools' or manifest.get('version')!=state.get('version')
+            or manifest.get('platform')!=state.get('platform')
+            or manifest.get('source_commit')!=state.get('source_commit')
+            or not isinstance(manifest.get('files'),dict)):
+        raise RuntimeError('Suite release metadata does not match its activation state')
+    for name,expected in manifest['files'].items():
+        path=(release/name).resolve()
+        if not path.is_relative_to(release) or not path.is_file() or digest(path)!=expected:
+            raise RuntimeError(f'Suite release file does not match its manifest: {name}')
+    return release
+
+
 def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=False,shortcuts=True):
     bundle=Path(bundle).resolve();prefix=prefix_path(prefix)
     manifest=verify_bundle(bundle)
@@ -236,8 +301,12 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             # An inactive completed release may still be a rollback target. Never remove it.
             release=prefix/'releases'/(build_id+'-'+str(time.time_ns()))
         release.parent.mkdir(parents=True,exist_ok=True)
-        shutil.copytree(bundle,release)
+        state_committed=False
+        tvpn_setup_attempted=False
         try:
+            # Keep an incomplete copy out of the active catalog and remove it
+            # on ENOSPC just like any later installer failure.
+            shutil.copytree(bundle,release)
             # The launcher needs windows-curses; Unix ships curses with Python.
             if os.name=='nt':
                 launcher_python=create_venv(release/'launcher-venv')
@@ -245,26 +314,44 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
             else:launcher_python=Path(sys.executable)
             apps=[]
             for app in proposed['install']:
-                command,env=install_component(app,release,defer_system)
-                apps.append({'id':app,'name':app,'version':proposed['versions'][app],
+                # Protected TVPN files are changed after every fallible
+                # component install and after the candidate state is written.
+                command,env=install_component(app,release,defer_system or app=='tvpn')
+                app_manifest=release/'components'/app/'app.json'
+                app_name=json.loads(app_manifest.read_text(encoding='utf-8')).get('name',app) if app_manifest.is_file() else app
+                apps.append({'id':app,'name':app_name,'version':proposed['versions'][app],
                              'command':command,'env':env,'update_owner':'ttools' if app!='tvpn' else 'tvpn',
                              'suite_managed':True})
             atomic_json(release/'apps.local.json',{'schema_version':1,'apps':apps})
-            state={'schema_version':1,'version':manifest['version'],'build_id':build_id,'release':str(release),
+            state={'schema_version':1,'version':manifest['version'],'source_commit':manifest.get('source_commit'),
+                   'build_id':build_id,'release':str(release),
                    'python':str(launcher_python),'platform':target,'complete':proposed['complete'] and not (defer_system and 'tvpn' in proposed['install']),
                    'unsupported':proposed['unsupported'],'options':options,'installed_at':time.time()}
             if old:state['previous']=old
             # Prevent an unbounded nested history in state.json.
             if old and 'previous' in old:old.pop('previous')
             atomic_json(state_path,state)
+            state_committed=True
             try:
-                _write_shortcuts(prefix,shortcuts)
+                _write_shortcuts(prefix,shortcuts,proposed['install'])
             except BaseException:
                 if old:atomic_json(state_path,old)
                 else:state_path.unlink(missing_ok=True)
+                state_committed=False
                 raise
+            if 'tvpn' in proposed['install'] and not defer_system:
+                tvpn_setup_attempted=True
+                configure_tvpn_system(release,target)
         except BaseException:
-            # TVPN's own installer rolls back protected files before returning an error.
+            if state_committed:
+                if old:atomic_json(state_path,old)
+                else:state_path.unlink(missing_ok=True)
+            # TVPN's Linux helper is transactional; when an older suite exists,
+            # reapply its protected backend if platform setup failed partway.
+            if tvpn_setup_attempted and old and 'tvpn' in old.get('options',{}).get('components',[]) and not old.get('options',{}).get('defer_system',False):
+                try:configure_tvpn_system(Path(old['release']),old['platform'])
+                except BaseException as restore_error:
+                    raise RuntimeError(f'TVPN setup failed and the previous protected backend could not be restored: {restore_error}') from restore_error
             shutil.rmtree(release,ignore_errors=True)
             raise
         print(json.dumps({'installed':state['version'],'complete':state['complete'],'unsupported':state['unsupported'],'prefix':str(prefix)},ensure_ascii=False))
@@ -272,17 +359,10 @@ def install(bundle,prefix,selected=APP_IDS,allow_partial=False,defer_system=Fals
 
 
 def release_manifest():
-    releases=read_remote_json(f'https://api.github.com/repos/{REPOSITORY}/releases?per_page=10')
-    for release in releases:
-        if release.get('draft'):continue
-        # Stable channel: prereleases are explicitly opt-in.
-        if release.get('prerelease') and os.environ.get('TTOOLS_CHANNEL')!='preview':continue
-        for asset in release.get('assets',[]):
-            if asset['name']=='suite-update.json':
-                return read_remote_json(asset['browser_download_url'])
-    raise RuntimeError('No published suite release in this update channel')
+    # Stable channel is the default; preview installs opt in through prefix/channel.
+    return latest_suite_manifest(preview=os.environ.get('TTOOLS_CHANNEL')=='preview')
 
-def update(prefix,force=False,automatic=False):
+def update(prefix,force=False,automatic=False,remote=None):
     prefix=prefix_path(prefix)
     state=json.loads((prefix/'state.json').read_text(encoding='utf-8'))
     if (prefix/'channel').is_file():
@@ -290,10 +370,16 @@ def update(prefix,force=False,automatic=False):
     stamp=prefix/'update-check.json'
     if automatic and stamp.is_file():
         cached=json.loads(stamp.read_text(encoding='utf-8'))
-        if time.time()-cached.get('checked',0)<86400:return False
+        retry_after=900 if cached.get('status')=='unavailable' else 21600
+        if time.time()-cached.get('checked',0)<retry_after:return False
     with locked(prefix):
-        remote=release_manifest()
-        if remote.get('schema_version')!=1 or remote.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
+        remote=remote or release_manifest()
+        if remote.get('schema_version') not in (1,2) or remote.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
+        remote_commit=remote.get('source_commit')
+        if remote.get('schema_version')==2 and not valid_source_commit(remote_commit):
+            raise ValueError('Invalid suite source commit')
+        if remote_commit is not None and not valid_source_commit(remote_commit):
+            raise ValueError('Invalid suite source commit')
         atomic_json(stamp,{'checked':time.time(),'version':remote['version']})
         if remote['version']==state['version']:
             return False
@@ -313,20 +399,38 @@ def update(prefix,force=False,automatic=False):
             manifest=verify_bundle(bundle)
             if manifest['version']!=remote['version'] or manifest['platform']!=state['platform']:
                 raise ValueError('Update metadata mismatch')
+            if remote_commit is not None and manifest.get('source_commit')!=remote_commit:
+                raise ValueError('Update source commit mismatch')
             # Installation uses a fresh process after releasing the suite lock.
             pending=prefix/'pending'
             candidate=prefix/('.pending-'+str(time.time_ns()))
-            shutil.copytree(bundle,candidate)
-            if pending.exists():shutil.rmtree(pending)
-            candidate.rename(pending)
+            try:
+                shutil.copytree(bundle,candidate)
+                if pending.exists():shutil.rmtree(pending)
+                candidate.rename(pending)
+            except BaseException:
+                shutil.rmtree(candidate,ignore_errors=True)
+                raise
     options=state['options']
+    components=list(options['components'])
+    if (state.get('platform')=='linux-x86_64'
+            and set(components)=={'tspotify','ttelegram','tthings','tvpn'}):
+        # Existing full-suite installs receive newly added default apps. Custom
+        # component selections remain intact; unsupported apps are filtered by plan().
+        components=list(APP_IDS)
     # Run the new installer so future schema/installer changes are honored.
     argv=[sys.executable,str(prefix/'pending/installer.py'),'--prefix',str(prefix),
-          '--components',','.join(options['components'])]
+          '--components',','.join(components)]
     if options['allow_partial']:argv.append('--allow-partial')
     if options['defer_system']:argv.append('--defer-system')
     if not options['shortcuts']:argv.append('--no-shortcuts')
-    run(argv)
+    try:
+        run(argv)
+    finally:
+        # The installer has copied verified bytes into releases before it
+        # exits. Keep neither a stale verified package nor a failed candidate
+        # in the staging slot after the process boundary.
+        shutil.rmtree(prefix/'pending',ignore_errors=True)
     return True
 
 
@@ -335,10 +439,30 @@ def rollback(prefix):
     with locked(prefix):
         state=json.loads((prefix/'state.json').read_text(encoding='utf-8'))
         previous=state.get('previous')
-        if not previous or not Path(previous['release']).is_dir():raise RuntimeError('No previous suite release')
-        if 'tvpn' in state['options']['components']:
-            raise RuntimeError('TVPN protected backend needs its own verified rollback; suite rollback with TVPN is disabled')
-        atomic_json(prefix/'state.json',previous)
+        if not previous:raise RuntimeError('No previous suite release')
+        active_release=_validate_release_state(prefix,state)
+        previous_release=_validate_release_state(prefix,previous)
+        current_options=state.get('options',{})
+        previous_options=previous.get('options',{})
+        current_tvpn='tvpn' in current_options.get('components',[])
+        previous_tvpn='tvpn' in previous_options.get('components',[])
+        current_system=current_tvpn and not current_options.get('defer_system',False)
+        previous_system=previous_tvpn and not previous_options.get('defer_system',False)
+        if current_system and not previous_tvpn:
+            raise RuntimeError('Cannot roll back TVPN system files: the previous suite has no TVPN package')
+        if current_system and previous_tvpn and not previous_system:
+            raise RuntimeError('Cannot safely restore TVPN: the previous suite deferred system setup')
+        stop_previous_background_apps(state)
+        if previous_system:
+            configure_tvpn_system(previous_release,previous['platform'])
+        try:
+            atomic_json(prefix/'state.json',previous)
+        except BaseException:
+            if previous_system and current_system:
+                try:configure_tvpn_system(active_release,state['platform'])
+                except BaseException as restore_error:
+                    raise RuntimeError(f'Suite state rollback failed and the active TVPN backend could not be restored: {restore_error}') from restore_error
+            raise
         print('Previous suite activated; user data preserved.')
 
 
@@ -376,10 +500,31 @@ def launch_installed(prefix,args):
         else:print((prefix/'state.json').read_text(encoding='utf-8'))
         return 0
     is_app=len(args)>=2 and args[0]=='--app'
-    if not is_app and not any(a in args for a in ('--list','--check-updates','--import','--help')) and os.environ.get('TTOOLS_AUTOUPDATE','1')!='0':
+    update_commands=('--list','--check-updates','--import','--help')
+    should_check=(not any(a in args for a in update_commands)
+                  and os.environ.get('TTOOLS_AUTOUPDATE','1')!='0')
+    if should_check:
         try:
-            if update(prefix,automatic=True):
-                os.execv(sys.executable,[sys.executable,str(prefix/'runner.py'),*args])
+            if sys.platform=='darwin' and sys.stdin.isatty() and sys.stdout.isatty():
+                stamp=prefix/'update-check.json'
+                cached=json.loads(stamp.read_text(encoding='utf-8')) if stamp.is_file() else {}
+                retry_after=900 if cached.get('status')=='unavailable' else 21600
+                due=time.time()-cached.get('checked',0)>=retry_after
+                if due:
+                    state=json.loads((prefix/'state.json').read_text(encoding='utf-8'))
+                    if (prefix/'channel').is_file():
+                        os.environ['TTOOLS_CHANNEL']=(prefix/'channel').read_text(encoding='utf-8').strip()
+                    remote=release_manifest()
+                    if remote.get('schema_version')!=1 or remote.get('app_id')!='ttools':
+                        raise ValueError('Invalid suite update manifest')
+                    atomic_json(stamp,{'checked':time.time(),'version':remote['version']})
+                    if version_key(remote['version'])>version_key(state['version']):
+                        print(f"\nttools {remote['version']} доступен (установлена версия {state['version']}).")
+                        answer=input('Обновить сейчас? [д/Н] ').strip().casefold()
+                        if answer in ('д','да','y','yes') and update(prefix,force=True,remote=remote):
+                            _reexec(prefix,args)
+            elif update(prefix,automatic=True):
+                _reexec(prefix,args)
         except Exception as error:
             atomic_json(prefix/'update-error.json',{'time':time.time(),'error':str(error)})
             atomic_json(prefix/'update-check.json',{'checked':time.time(),'status':'unavailable'})
@@ -407,13 +552,17 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description='ttools suite install-only')
     parser.add_argument('--prefix')
     parser.add_argument('--bundle',type=Path,default=Path(__file__).resolve().parents[1])
-    parser.add_argument('--components',default=','.join(APP_IDS))
+    parser.add_argument('--components',default=None)
     parser.add_argument('--allow-partial',action='store_true')
     parser.add_argument('--defer-system',action='store_true',help='Stage VPN without privileged network setup; VPN will not be ready')
     parser.add_argument('--no-shortcuts',action='store_true')
     parser.add_argument('--plan',action='store_true')
     args=parser.parse_args(argv)
-    selected=tuple(x for x in args.components.split(',') if x)
+    if args.components is None:
+        # Default excludes components with no native package for this platform.
+        selected=tuple(default_components(platform_id()))
+    else:
+        selected=tuple(x for x in args.components.split(',') if x)
     if not selected:parser.error('At least one component is required')
     try:
         if args.plan:
@@ -426,3 +575,14 @@ def main(argv=None):
         return 1
 
 if __name__=='__main__':raise SystemExit(main())
+
+
+def _reexec(prefix,args):
+    """Re-execute runner.py after an in-place update; Windows-safe."""
+    runner=str(Path(prefix).resolve()/'runner.py')
+    argv=[sys.executable,runner,*args]
+    if os.name=='nt':
+        # os.execv on Windows cannot reliably replace the current process; spawn
+        # a fresh one and propagate its status after releasing our handles.
+        raise SystemExit(subprocess.call(argv))
+    os.execv(sys.executable,argv)

@@ -1,0 +1,45 @@
+{
+  "id": "tsoundcloud",
+  "name": "SoundCloud",
+  "version": "0.1.0",
+  "supported_platforms": [
+    "linux-x86_64"
+  ],
+  "status": "preview; demo verified, live browser login awaiting confirmation",
+  "prerequisites": [
+    "Python 3.10+ with curses and UTF-8 terminal",
+    "FFmpeg and SDL2 for audio; not needed for demo",
+    "Internet and browser for live SoundCloud"
+  ],
+  "launch_argv": [
+    "python3",
+    "${BUNDLE}/launch.py"
+  ],
+  "demo_argv": [
+    "python3",
+    "${BUNDLE}/launch.py",
+    "--demo",
+    "--no-splash"
+  ],
+  "version_argv": [
+    "python3",
+    "${BUNDLE}/launch.py",
+    "--version"
+  ],
+  "install_argv": null,
+  "stop": {
+    "terminal_input": "Ctrl+Q (byte 0x11)",
+    "scope": "owned foreground PTY only"
+  },
+  "update_manifest_url": null,
+  "update_owner": "ttools",
+  "data_paths": [
+    "${HOME}/.config/tsound or TSOUND_HOME/XDG_CONFIG_HOME",
+    "${HOME}/.var/app/<browser-id>/data/tsoundcloud-profile when selected"
+  ],
+  "path_substitution": "${BUNDLE} is the absolute directory containing this manifest. Expand argv without a shell.",
+  "runtime": {
+    "file": "runtime/tsound-0.1.0-py3-none-any.whl",
+    "sha256_file": "runtime/SHA256SUMS"
+  }
+}

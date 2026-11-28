@@ -1,5 +1,17 @@
 # Проверка 2026-11-17
 
+## QA follow-up: Gallery Mode and offline preview transition
+
+The existing **Beautiful Things** built-in catalogue is now named **Gallery
+Mode** in the UI and documentation. Its selected effect preview uses a
+deterministic 320 ms terminal-cell dissolve when selection changes. This
+transitions only the catalogue preview; effect renderers and playback are
+unchanged. Two additional tests cover category selection, Cyrillic search,
+favorites persistence, launching an effect and returning to the menu, plus
+transition progress and terminal resize. The full source suite now has 67
+passing tests. The tests use a scripted terminal and do not establish visual
+correctness in Windows Terminal or macOS terminals.
+
 Проверено локально на SteamOS x86_64, Python 3.14:
 
 - 9 unittest-проверок: все 19 эффектов при 6 размерах от 1×1 до 130×40,
@@ -131,9 +143,13 @@ PNG кадров Pixel Worlds и Systems Things визуально просмо�
 
 ## 0.7.2
 
-65 тестов проходят. Проверены OSC0 + Konsole OSC30 %w, кеширование подписи,
+67 тестов проходят. Проверены OSC0 + Konsole OSC30 %w, кеширование подписи,
 восстановление формата вкладки, чтение профиля при недоступном D-Bus,
 санитизация текста, категория и текущая функция; тесты GUI проверяют смену
 подписей N/R/авто. Frozen Linux runtime проверен в PTY для clock и processes
 с названием функции и раздела, OSC30 и восстановлением при выходе.
 Визуальная проверка вкладки живого Konsole недоступна: D-Bus AccessDenied.
+
+Два новых теста: GalleryPreview dissolve transition + resize, и полная
+Gallery Mode interaction (категория, кириллица, избранное, запуск эффекта,
+возврат в меню, сохранение настроек).

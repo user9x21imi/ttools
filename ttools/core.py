@@ -48,15 +48,43 @@ def add_source(path):
     temp.write_text(json.dumps(values, ensure_ascii=False, indent=2),encoding='utf-8')
     temp.replace(CONFIG/'sources.json')
 
+def _dev_catalog_path():
+    """Return path to a development apps.local.json if running from source tree."""
+    # Check if we're in the ttools source tree by looking for component directories
+    here = Path(__file__).resolve()
+    # ttools/core.py -> parents[1] = repo root (ttools-integration/)
+    repo_root = here.parents[1]
+    components = repo_root/'components'
+    if not components.is_dir():
+        return None
+    # Check for at least one component source directory
+    if not any((components/c/'source').is_dir() for c in ('tspotify','tthings','tvpn','ttelegram','tsoundcloud')):
+        return None
+    # Look for a pre-generated dev catalog at repo root
+    dev_catalog = repo_root/'apps.local.json'
+    if dev_catalog.is_file():
+        return dev_catalog
+    return None
+
 def load_apps():
     merged, errors = {}, []
     managed = os.environ.get('TTOOLS_CATALOG')
+    # User sources and managed catalog take priority
     for path in sources() + ([managed] if managed else []):
         try:
             for app in read_catalog(path):
                 merged[app['id']] = app
         except (OSError, ValueError, TypeError) as e:
             errors.append(f'{path}: {e}')
+    # Fallback: development catalog from source tree (only if no apps loaded yet)
+    if not merged and not managed and not sources():
+        dev_path = _dev_catalog_path()
+        if dev_path:
+            try:
+                for app in read_catalog(dev_path):
+                    merged[app['id']] = app
+            except (OSError, ValueError, TypeError) as e:
+                errors.append(f'{dev_path}: {e}')
     order = {'tspotify':0, 'tsoundcloud':1, 'soundcloud':1, 'tyoutube':2, 'youtube':2, 'ttelegram':3, 'tvpn':4, 'tthings':5}
     return sorted(merged.values(), key=lambda app: order.get(app['id'], 6)), errors
 

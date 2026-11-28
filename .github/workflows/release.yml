@@ -31,6 +31,13 @@ jobs:
         run: python -m pip install -e .
       - name: Unit and terminal integration tests
         run: python -m unittest discover -s tests -v
+      - name: Windows regression: real launch commands, exit codes, terminal restore
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install ./components/tspotify/source
+          python -m pip install ./components/tthings/source
+          python -m unittest tests.test_windows_regression -v
       - name: Check macOS system certificates with empty Python trust store
         if: runner.os == 'macOS'
         run: python tests/smoke_macos_tls.py
@@ -55,6 +62,30 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:RUNNER_TEMP/Telegram проверка с пробелами/bootstrap/python.exe" -c "import runpy,sys;runpy.run_path(sys.argv.pop(1),run_name='__main__')" "$env:RUNNER_TEMP/Telegram проверка с пробелами/manage.py" doctor --prefix "$env:RUNNER_TEMP/Telegram проверка с пробелами"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows installer logic with Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/windows/test_install_ps1.ps1
+      - name: Windows installer logic with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/windows/test_install_ps1.ps1
+      - name: Probe installed WinGet and Python on Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./tests/windows/test_live_dependencies.ps1
+      - name: Physically install the verified Python.org fallback with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/windows/test_live_dependencies.ps1 -InstallVerifiedPythonFallback
+      - name: Read-only dependency diagnostic with Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: ./scripts/Diagnose-TTools.ps1
+      - name: Read-only dependency diagnostic with PowerShell 7
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/Diagnose-TTools.ps1
       - name: Preview platform installation plan
         run: python installer.py --plan --allow-partial
   package:
@@ -75,9 +106,92 @@ jobs:
         with:
           name: ttools-release
           path: dist/*
-  publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
+  windows-installer-smoke:
     needs: package
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ttools-release
+          path: ${{ runner.temp }}/ttools-release
+      - name: Install from release ZIP and PowerShell, verify state, launch and return
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'ttools-release/ttools-windows-x86_64.zip'
+          $package = Join-Path $env:RUNNER_TEMP 'TTools пакет с пробелами'
+          $prefix = Join-Path $env:RUNNER_TEMP 'TTools установка с пробелами'
+          Expand-Archive -LiteralPath $archive -DestinationPath $package
+          $packageRoot = Join-Path $package 'ttools'
+          if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'Install-ttools.cmd') -PathType Leaf)) { throw 'Windows ZIP layout is missing ttools/Install-ttools.cmd.' }
+          if (-not (Test-Path -LiteralPath (Join-Path $packageRoot 'scripts/Diagnose-TTools.ps1') -PathType Leaf)) { throw 'Windows ZIP is missing the read-only dependency diagnostic.' }
+          Push-Location $packageRoot
+          $zipLog = Join-Path $env:RUNNER_TEMP 'TTools журнал с пробелами.log'
+          $line = 'Install-ttools.cmd -Preview -Prefix "' + $prefix + '" -DeferSystem -LogPath "' + $zipLog + '"'
+          $env:TTOOLS_INSTALLER_NO_PAUSE = '1'
+          & $env:ComSpec /d /c $line
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath $zipLog -PathType Leaf)) { throw 'ZIP installer did not create the requested PowerShell transcript.' }
+          if ((Get-Content -LiteralPath $zipLog -Raw) -notmatch 'Detailed installer log enabled\.') { throw 'ZIP installer transcript did not capture the installer session.' }
+          $statePath = Join-Path $prefix 'state.json'
+          if (-not (Test-Path -LiteralPath $statePath -PathType Leaf)) { throw 'ZIP install did not create state.json.' }
+          $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+          if (-not (Test-Path -LiteralPath (Join-Path $prefix 'runner.py') -PathType Leaf)) { throw 'ZIP install did not create runner.py.' }
+          $expectedApps = @('tspotify','ttelegram','tvpn','tthings')
+          $catalog = Get-Content -LiteralPath (Join-Path $state.release 'apps.local.json') -Raw | ConvertFrom-Json
+          $installedApps = @($catalog.apps | ForEach-Object { $_.id })
+          foreach ($app in $expectedApps) {
+            if ($installedApps -notcontains $app) { throw "The active Windows release does not include $app." }
+          }
+          $bundle = Get-Content -LiteralPath (Join-Path $state.release 'bundle.json') -Raw | ConvertFrom-Json
+          if ($state.version -ne $bundle.version) { throw 'The active release does not match its bundle manifest.' }
+          $sentinelPath = Join-Path $prefix 'user-data/qa-sentinel.json'
+          New-Item -ItemType Directory -Path (Split-Path -Parent $sentinelPath) -Force | Out-Null
+          Set-Content -LiteralPath $sentinelPath -Value '{"keep":"repeat-install"}' -NoNewline
+          & $env:ComSpec /d /c $line
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Content -LiteralPath $sentinelPath -Raw) -ne '{"keep":"repeat-install"}') { throw 'Repeat ZIP install changed user data.' }
+          if ((Get-Item -LiteralPath $zipLog).Length -le 0) { throw 'ZIP installer transcript is empty after repeat installation.' }
+          $env:TTOOLS_AUTOUPDATE = '0'
+          $launcher = Join-Path $prefix 'bin/ttools.cmd'
+          if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'ZIP install did not create the ttools command shim.' }
+          $apps = & $launcher --list | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($app in $expectedApps) {
+            if ($apps -notmatch ('(?m)^' + [regex]::Escape($app) + '\s')) { throw "Installed launcher did not list $app." }
+            & $launcher --app $app --help | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Launcher could not start and return from $app --help." }
+            & $launcher --list | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Launcher did not return after $app." }
+          }
+          Pop-Location
+          $remotePrefix = Join-Path $env:RUNNER_TEMP 'TTools удалённая установка'
+          $remoteLog = Join-Path $env:RUNNER_TEMP 'TTools PowerShell журнал.log'
+          $candidateBootstrap = "https://raw.githubusercontent.com/$env:GITHUB_REPOSITORY/$env:GITHUB_SHA/bootstrap.py"
+          $env:TTOOLS_BOOTSTRAP_URL = $candidateBootstrap
+          & (Join-Path $env:GITHUB_WORKSPACE 'install.ps1') -Preview -Prefix $remotePrefix -Components tthings -LogPath $remoteLog
+          Remove-Item Env:TTOOLS_BOOTSTRAP_URL
+          if (-not (Test-Path -LiteralPath $remoteLog -PathType Leaf)) { throw 'PowerShell installer did not create the requested transcript.' }
+          if ((Get-Content -LiteralPath $remoteLog -Raw) -notmatch 'Detailed installer log enabled\.') { throw 'PowerShell installer transcript did not capture the session.' }
+          $remoteLauncher = Join-Path $remotePrefix 'bin/ttools.cmd'
+          if (-not (Test-Path -LiteralPath $remoteLauncher -PathType Leaf)) { throw 'PowerShell install did not create the ttools command shim.' }
+          $remoteApps = & $remoteLauncher --list | Out-String
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($remoteApps -notmatch '(?m)^tthings\s') { throw 'PowerShell-installed launcher did not list tthings.' }
+          & $remoteLauncher --app tthings --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $remoteLauncher --list
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Host 'Release ZIP and remote installs, repeat install, ttools launcher, and tthings launch all passed.'
+  publish:
+    # A versioned change merged to main becomes a public preview Release after
+    # every check and platform package succeeds. Maintainers can also publish a
+    # selected ref manually.
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: [package, windows-installer-smoke]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

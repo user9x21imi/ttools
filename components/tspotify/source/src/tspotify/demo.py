@@ -3,6 +3,7 @@
 import copy
 import curses
 import math
+import os
 import time
 from types import SimpleNamespace
 
@@ -38,7 +39,7 @@ class Demo:
                 id=str(i),
                 name=name,
                 type="track",
-                artists=[{"name": artist}],
+                artists=[{"id": "demo-artist", "name": artist}],
                 album={"id": "demo", "name": "After Hours", "images": [{"url": "demo:cover"}]},
                 duration_ms=240000,
             )
@@ -106,17 +107,63 @@ class Demo:
             self.volume = max(0, min(100, int(value)))
         return "ДЕМО / звук выключен"
 
+    def start_jam(self):
+        raise RuntimeError("В деморежиме Jam не создаётся. Войдите в Spotify в обычном режиме.")
+
     def toggle_favorite(self, track_id):
         self.saved = not self.saved
         return self.saved
 
     def search(self, query):
+        tracks = [
+            copy.deepcopy(x)
+            for x in self.tracks
+            if query.lower() in (x["name"] + " " + x["artists"][0]["name"]).lower()
+        ]
+        artists = [
+            {
+                "id": "demo-artist",
+                "name": "Ghosts on Tape",
+                "images": [{"url": "demo:cover"}],
+                "genres": ["ambient electronic"],
+            }
+        ] if "ghost" in query.lower() or "artist" in query.lower() else []
         return {
-            "tracks": [
-                copy.deepcopy(x)
-                for x in self.tracks
-                if query.lower() in (x["name"] + " " + x["artists"][0]["name"]).lower()
-            ]
+            "tracks": tracks,
+            "artists": artists,
+        }
+
+    def artist_profile(self, item_id, name=""):
+        artist = {
+            "id": item_id,
+            "name": name or "Ghosts on Tape",
+            "images": [{"url": "demo:cover"}],
+            "genres": ["ambient electronic"],
+        }
+        albums = [
+            {
+                "id": "demo-album-1",
+                "name": "After Hours",
+                "album_type": "album",
+                "_artist_group": "album",
+                "release_date": "2024",
+                "total_tracks": 8,
+                "images": [{"url": "demo:cover"}],
+            },
+            {
+                "id": "demo-album-2",
+                "name": "Soft Signals",
+                "album_type": "single",
+                "_artist_group": "single",
+                "release_date": "2025-03",
+                "total_tracks": 2,
+                "images": [{"url": "demo:cover"}],
+            },
+        ]
+        return {
+            "artist": artist,
+            "releases": {"album": albums[:1], "single": albums[1:], "appears_on": [], "compilation": []},
+            "catalog_label": "Доступный каталог релизов",
         }
 
 
@@ -126,6 +173,16 @@ def run(args):
     ui.API = Demo()
     ui.ASCII_ONLY = args.ascii
     ui.NO_SPLASH = args.no_splash
+    ui.NO_MOTION = args.no_motion or os.environ.get("TSPOTIFY_REDUCED_MOTION", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    ui.LOW_POWER = args.low_power or os.environ.get("TSPOTIFY_LOW_POWER", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     ui.DEMO_MODE = True
     ui.ART = paths.CACHE / "demo"
     ui.ART.mkdir(exist_ok=True)

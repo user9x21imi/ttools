@@ -29,25 +29,45 @@ def runtime_lock():
     if root is None:
         yield
         return
-    if os.name != "posix":
-        # ttools distribution adaptation: match the suite's Windows locking API.
-        import msvcrt
-        with (root / "run.lock").open("a+b") as stream:
-            stream.seek(0); stream.write(b"0"); stream.flush(); stream.seek(0)
-            try:
-                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
-            except OSError:
-                raise RuntimeError("tspotify is running or updating") from None
-            try:
-                yield
-            finally:
-                stream.seek(0); msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-        return
-    import fcntl
-
-    with (root / "run.lock").open("a+b") as stream:
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / "run.lock"
+    with lock_path.open("a+b") as stream:
+        _acquire_exclusive(stream)
         try:
+            yield
+        finally:
+            _release(stream)
+
+
+def _acquire_exclusive(stream):
+    """Take a non-blocking exclusive lock on one byte; raise RuntimeError if held."""
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            stream.seek(0)
+            stream.write(b"0")
+            stream.flush()
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("tspotify запущен или обновляется; дождитесь завершения") from None
-        yield
+    except (BlockingIOError, OSError):
+        raise RuntimeError("tspotify запущен или обновляется; дождитесь завершения") from None
+
+
+def _release(stream):
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(stream, fcntl.LOCK_UN)
+    except OSError:
+        pass

@@ -2,7 +2,8 @@
 
 | Component | Source | License / notices |
 |---|---|---|
-| tspotify | supplied clean handoff, commit b9de12e7124cdfc1b77753a09ab828e4e0885f26 | components/tspotify/source/LICENSE, NOTICE |
+| tspotify | supplied clean handoff, commit 5c64c3323acf493093c874f971f60a07284c472e | components/tspotify/source/LICENSE, NOTICE |
+| tsoundcloud | supplied local handoff 0.1.0 | components/tsoundcloud/source; no third-party Python dependencies |
 | TVPN | supplied local project 1.3.1 with install-only/lifecycle changes | components/tvpn/source/LICENSE, SOURCES.md, assets/licenses |
 | tthings | supplied handoff 0.7.0 | components/tthings/source/LICENSE; Fastfetch notices shipped in source |
 | ttelegram | supplied code allowlist 2026.11.18.4 | upstream tg Unlicense: components/ttelegram/source/vendor/TG-LICENSE.txt |

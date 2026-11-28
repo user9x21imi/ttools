@@ -71,10 +71,12 @@ def release_manifest(preview=False, tag=None):
         except urllib.error.HTTPError as error:
             if error.code==404 and not tag:continue
             raise
-        if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':
+        if manifest.get('schema_version') not in (1,2) or manifest.get('app_id')!='ttools':
             raise ValueError('Invalid update manifest')
         if manifest.get('version')!=candidate.removeprefix('v'):
             raise ValueError('Release tag/version mismatch')
+        if manifest.get('schema_version')==2 and not re.fullmatch(r'[0-9a-f]{40}',manifest.get('source_commit','')):
+            raise ValueError('Invalid suite source commit')
         return manifest
     raise RuntimeError('No published suite release in this channel')
 
@@ -84,6 +86,14 @@ def target_platform():
     arch={'x86_64':'x86_64','amd64':'x86_64','arm64':'arm64','aarch64':'arm64'}.get(platform.machine().lower())
     if not system or not arch:raise RuntimeError('Unsupported OS/architecture')
     return system+'-'+arch
+
+def verify_bundle_commit(manifest, bundle_info):
+    """Check schema-2 provenance without requiring a schema-2-era bundle API."""
+    commit=manifest.get('source_commit')
+    if commit is None:return
+    if (not isinstance(commit,str) or not re.fullmatch(r'[0-9a-f]{40}',commit)
+            or bundle_info.get('source_commit')!=commit):
+        raise ValueError('Suite source commit mismatch')
 
 def python314(prefix):
     if sys.version_info[:2]==(3,14):return Path(sys.executable)
@@ -124,20 +134,26 @@ def main():
         for stream in (sys.stdout,sys.stderr):
             if hasattr(stream,'reconfigure'):stream.reconfigure(encoding='utf-8',errors='replace')
     p=argparse.ArgumentParser(description='One-command ttools suite bootstrap')
-    p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true')
-    p.add_argument('--components',default='tspotify,ttelegram,tvpn,tthings');p.add_argument('--no-system-deps',action='store_true')
+    p.add_argument('--prefix');p.add_argument('--allow-partial',action='store_true');p.add_argument('--release');p.add_argument('--preview',action='store_true');p.add_argument('--defer-system',action='store_true')
+    p.add_argument('--components',default=None);p.add_argument('--no-system-deps',action='store_true')
     args=p.parse_args()
     target=target_platform()
+    if args.components is None:
+        # Skip components with no native package on this platform (SoundCloud is Linux-only).
+        args.components=','.join(('tspotify','ttelegram','tvpn','tthings') if target=='windows-x86_64' else
+                                 ('tspotify','tsoundcloud','ttelegram','tvpn','tthings'))
     selected=args.components.split(',')
     # Reject unsupported complete installations before downloading/installing anything.
     if target not in ('linux-x86_64','windows-x86_64') and 'ttelegram' in selected and not args.allow_partial:
         p.error('Telegram is packaged for Linux x86_64 and preview Windows x64. A complete native suite is not available for this OS. --allow-partial installs the supported applications explicitly.')
+    if target!='linux-x86_64' and 'tsoundcloud' in selected and not args.allow_partial:
+        p.error('SoundCloud is packaged for Linux x86_64 only. --allow-partial installs the supported applications explicitly.')
     if args.prefix:prefix=Path(args.prefix).expanduser().resolve()
     elif os.name=='nt':prefix=Path(os.environ['LOCALAPPDATA'])/'ttools'
     elif platform.system()=='Darwin':prefix=Path.home()/'Library/Application Support/ttools'
     else:prefix=Path(os.environ.get('XDG_DATA_HOME',Path.home()/'.local/share'))/'ttools-suite'
     manifest=release_manifest(args.preview,args.release)
-    if manifest.get('schema_version')!=1 or manifest.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
+    if manifest.get('schema_version') not in (1,2) or manifest.get('app_id')!='ttools':raise ValueError('Invalid update manifest')
     artifact=next((a for a in manifest['artifacts'] if a['platform']==target),None)
     if not artifact:raise RuntimeError('No release for '+target)
     archive_data=read(artifact['url'],700*1024*1024)
@@ -154,18 +170,20 @@ def main():
             package.extractall(folder/'unpacked')
         bundle=folder/'unpacked/ttools'
         sys.path.insert(0,str(bundle))
-        from ttools.distribution import verify_bundle
-        info=verify_bundle(bundle)
+        from ttools import distribution
+        info=distribution.verify_bundle(bundle)
         if info['version']!=manifest['version'] or info['platform']!=target:raise ValueError('Wrong bundle version/platform')
+        verify_bundle_commit(manifest,info)
         if not args.no_system_deps:prepare_linux(selected)
         py=python314(prefix)
         argv=[str(py),str(bundle/'installer.py'),'--prefix',str(prefix),'--components',args.components]
         if args.allow_partial:argv.append('--allow-partial')
+        if args.defer_system:argv.append('--defer-system')
         subprocess.run(argv,check=True)
         if args.preview:
             (prefix/'channel').write_text('preview',encoding='utf-8')
     print('Installed. Open a new terminal and run: ttools')
-    if args.allow_partial and target.startswith('macos'):print('Partial installation: Telegram is not included on macOS.')
+    if args.allow_partial and target.startswith('macos'):print('Partial installation: Telegram and SoundCloud are not included on macOS.')
     return 0
 
 if __name__=='__main__':

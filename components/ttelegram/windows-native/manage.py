@@ -5,6 +5,20 @@ BUNDLE=Path(__file__).resolve().parent
 sys.path.insert(0,str(BUNDLE/'source'))
 from process_control import default_prefix,lock,running,stop
 
+def find_windows_terminal():
+    """Locate wt.exe, including the per-user app execution alias not on PATH."""
+    found=shutil.which('wt.exe')
+    if found:return found
+    if os.name=='nt':
+        roots=[]
+        local=os.environ.get('LOCALAPPDATA')
+        if local:roots.append(Path(local)/'Microsoft/WindowsApps/wt.exe')
+        program=os.environ.get('ProgramFiles')
+        if program:roots.append(Path(program)/'WindowsApps/wt.exe')
+        for candidate in roots:
+            if candidate.is_file():return str(candidate)
+    return None
+
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 def read(path):return json.loads(path.read_text(encoding='utf-8'))
 def write(path,value):
@@ -17,7 +31,9 @@ def verify(root):
         if not file.is_relative_to(root.resolve()) or not file.is_file() or digest(file)!=expected:raise RuntimeError('Integrity check failed: '+name)
     return manifest
 def current(prefix):
-    entry=read(prefix/'current.json');root=(prefix/'versions'/entry['version']).resolve()
+    pointer=prefix/'current.json'
+    if not pointer.is_file():raise RuntimeError('TTelegram is not installed in "'+str(prefix)+'". Run install.cmd --prefix "'+str(prefix)+'" (or manage.py install --prefix "'+str(prefix)+'") first.')
+    entry=read(pointer);root=(prefix/'versions'/entry['version']).resolve()
     if not root.is_relative_to((prefix/'versions').resolve()) or not root.is_dir():raise RuntimeError('Invalid installed version')
     return root
 
@@ -69,7 +85,7 @@ def install(prefix,requested=False):
     (prefix/'manage.py').write_text(manager,encoding='utf-8')
     # Stable embedded interpreter imports only its standard library; entry uses runpy to locate manager.
     write(prefix/'current.json',{'version':version})
-    (prefix/'ttelegram.cmd').write_text('@echo off\r\n"%~dp0bootstrap\\python.exe" -c "import runpy,sys;sys.path.insert(0,sys.argv.pop(1));runpy.run_path(sys.argv.pop(1),run_name=\'__main__\')" "%~dp0" "%~dp0manage.py" launch --prefix "%~dp0." %*\r\n',encoding='utf-8')
+    (prefix/'ttelegram.cmd').write_text('@echo off\r\n"%~dp0bootstrap\\python.exe" -c "import runpy,sys;sys.path.insert(0,sys.argv.pop(1));runpy.run_path(sys.argv.pop(1),run_name=\'__main__\')" "%~dp0." "%~dp0manage.py" launch --prefix "%~dp0." %*\r\n',encoding='utf-8')
     print(json.dumps({'installed':version,'prefix':str(prefix),'started':False}))
 def doctor(root):
     report={'platform':sys.platform,'python':sys.version.split()[0],'root':str(root),'checks':{},'hardware_tested':False}
@@ -81,13 +97,15 @@ def doctor(root):
         checks['windows_64bit']=sys.maxsize>2**32
         import tdjson
         checks['tdlib']=json.loads(tdjson.td_execute(b'{"@type":"getOption","name":"version"}'))
+        # Telegram imports curses at module load time. Install the VT shim
+        # before importing tg so Windows never asks for the unavailable _curses.
+        import windows_bootstrap
+        windows_bootstrap.install()
         import PIL,qrcode,rlottie_python,sounddevice,imageio_ffmpeg,telegram,tg
         checks['imports']=True
         ffmpeg=imageio_ffmpeg.get_ffmpeg_exe();result=subprocess.run([ffmpeg,'-version'],capture_output=True,creationflags=subprocess.CREATE_NO_WINDOW)
         checks['ffmpeg']=result.returncode==0
         # Import every platform module without creating a Telegram session or opening the microphone.
-        import windows_bootstrap
-        windows_bootstrap.install()
         import client,engine,media,windows_audio,windows_desktop,vtcurses
         checks['client_imports']=True
     except Exception as problem:report['error']=str(problem)
@@ -100,10 +118,20 @@ def rollback(prefix,requested=False):
         verify(target);now=read(prefix/'current.json');write(prefix/'current.json',old);write(prefix/'previous.json',now)
     return old
 
+def recover_bundle_prefix(prefix,action):
+    """Dev launchers point --prefix at the source bundle; install on demand into the regular prefix."""
+    if action not in ('launch','version','doctor') or (prefix/'current.json').is_file():return prefix
+    if prefix.resolve()!=BUNDLE.resolve():return prefix
+    if not (BUNDLE/'bootstrap/python.exe').is_file() or not (BUNDLE/'wheels').is_dir():return prefix
+    installed=default_prefix()
+    if not (installed/'current.json').is_file():
+        with lock(installed/'run/manager.lock'):install(installed)
+    return installed
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('action',choices=['install','launch','version','stop','doctor','rollback','verify'])
     parser.add_argument('--prefix',type=Path,default=default_prefix());parser.add_argument('--root',type=Path);parser.add_argument('--stop',action='store_true');parser.add_argument('--in-terminal',action='store_true');parser.add_argument('--demo',action='store_true');parser.add_argument('--fast',action='store_true')
-    args=parser.parse_args();prefix=args.prefix.resolve()
+    args=parser.parse_args();prefix=recover_bundle_prefix(args.prefix.resolve(),args.action)
     if args.action=='install':
         with lock(prefix/'run/manager.lock'):install(prefix,args.stop)
         return 0
@@ -125,7 +153,7 @@ def main():
             command=[str(root/'runtime/python.exe'),str(root/'source/windows_entry.py'),'--prefix',str(prefix)]+(['--demo'] if args.demo else [])+(['--fast'] if args.fast else [])
             if args.in_terminal:process=subprocess.Popen(command,env=env)
             else:
-                terminal=shutil.which('wt.exe')
+                terminal=find_windows_terminal()
                 if not terminal:raise RuntimeError('Install Windows Terminal 1.22 or later, or launch --in-terminal inside a SIXEL terminal')
                 process=subprocess.Popen([terminal,'new-tab','--title','Telegram','--suppressApplicationTitle',*command],env=env)
             deadline=time.monotonic()+15

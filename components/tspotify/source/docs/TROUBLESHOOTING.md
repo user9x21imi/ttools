@@ -14,7 +14,7 @@ The Linux stream mute left by a zero-volume test is cleared only by an explicit 
 **Dots are missing / squares appear.** Use a Unicode monospace font or `tspotify --ascii`.
 No private-use icon font is needed. Windows Terminal is recommended over legacy conhost.
 
-**No spectrum.** Linux captures only the integrated Spotify stream with `parec --monitor-stream`; no stream means no bars. On Windows/macOS, route Spotify alone into a dedicated virtual channel and set `TSPOTIFY_SPOTIFY_LOOPBACK` to its exact input name/ID. The old `TSPOTIFY_LOOPBACK` shared-output option is ignored. External Connect playback has no local audio stream. Playback remains independent; hide the spectrum with `L`, then `v`.
+**No spectrum.** Linux captures only the integrated Spotify stream with `parec --monitor-stream`; no stream means no bars. The panel stays visible in compact 78×24 terminals. On Windows/macOS, route Spotify alone into a dedicated virtual input and set `TSPOTIFY_SPOTIFY_LOOPBACK` to its exact name or ID. List capture inputs with `python -c "import soundcard as sc; print('\\n'.join(x.name for x in sc.all_microphones(include_loopback=True)))"`. The old `TSPOTIFY_LOOPBACK` shared-output option is ignored. External Connect playback has no local audio stream. Playback remains independent; hide the spectrum with `L`, then `v`.
 
 **QR callback fails on a phone.** The callback is a loopback address on the computer. Copy the complete
 callback address from the phone and paste it in the QR sign-in prompt. Do not send it to anyone.

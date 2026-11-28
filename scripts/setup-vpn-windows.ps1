@@ -8,6 +8,9 @@ if (-not (Test-Path $gui)) {
 }
 $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 $argsList = @('-NoProfile','-File',('"'+$Setup+'"'),'-User',('"'+$user+'"'))
-$process = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList $argsList
+$shell = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
+if (-not $shell) { $shell = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source }
+if (-not $shell) { $shell = 'powershell.exe' }
+$process = Start-Process $shell -Verb RunAs -Wait -PassThru -ArgumentList $argsList
 if ($process.ExitCode -ne 0) { throw 'VPN administrator setup failed or was cancelled.' }
 Write-Host 'VPN permissions may require signing out and back in once.'

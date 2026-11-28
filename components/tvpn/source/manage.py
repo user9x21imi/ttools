@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import subprocess
 import sys
 import time
 import updater
@@ -29,16 +30,32 @@ def main(argv=None):
         elif args.command=='status':result=updater.lifecycle_status(root)
         elif args.command=='doctor':
             import platform,shutil
+            windows=sys.platform=='win32'
+            if windows:
+                commands=('curl','pwsh','powershell','openvpn','openvpn-gui','winget','icacls','sudo')
+                prog=Path(os.environ.get('ProgramFiles',r'C:\Program Files'))/'OpenVPN/bin'
+                gui=prog/'openvpn-gui.exe';openvpn=prog/'openvpn.exe'
+                service=_windows_service_state('OpenVPNServiceInteractive')
+                in_group=_windows_admin_group_member()
+            else:
+                commands=('bash','python3','curl','ip','flock','sudo','visudo','openvpn')
+                gui=None;openvpn=None;service=None;in_group=None
             result={'platform':sys.platform,'architecture':platform.machine(),'version':updater.local_version(root),
-                    'commands':{x:shutil.which(x) for x in ('bash','python3','curl','ip','flock','sudo','visudo')},
+                    'commands':{x:shutil.which(x) for x in commands},
+                    'openvpn_gui':str(gui) if gui else None,'openvpn_gui_present':bool(gui and gui.is_file()),
+                    'openvpn_present':bool(openvpn and openvpn.is_file()) or bool(shutil.which('openvpn')),
+                    'openvpn_interactive_service':service,'openvpn_administrator':in_group,
                     'protected_backend':Path('/var/lib/riseup-vpn/backend.sh').is_file(),
-                    'network_tested':False,'system_rules_modified':False}
+                    'network_tested':False,'system_rules_modified':False,'admin_required_for_connection':windows}
         elif args.command=='update':
             if args.manifest:
                 found=updater.parse_manifest(json.loads(args.manifest.read_text(encoding='utf-8')),updater.local_version(root))
             else:found=updater.check(root)
             if found:updater.apply(found,root)
-            result={'version':updater.local_version(root),'updated':bool(found),'launched':False}
+            state_file=root/'.cleanup.json'
+            try:resume_region=json.loads(state_file.read_text(encoding='utf-8')).get('region','amsterdam')
+            except (OSError,ValueError):resume_region='amsterdam'
+            result={'version':updater.local_version(root),'updated':bool(found),'launched':False,'resume_region':resume_region}
         else:
             if not 0<args.timeout<=300:raise updater.UpdateError('timeout must be between 0 and 300 seconds')
             status=updater.lifecycle_status(root)
@@ -53,11 +70,38 @@ def main(argv=None):
                     time.sleep(.1)
             updater.require_clean(root)
             with updater.backend_idle():pass
-            result={'stopped':True,'cleanup':'ok' if (root/'.cleanup.json').exists() else 'no_session','reconnected':False}
+            try:state=json.loads((root/'.cleanup.json').read_text(encoding='utf-8'))
+            except (OSError,ValueError):state={'region':'amsterdam'}
+            result={'stopped':True,'cleanup':'ok' if state.get('cleanup')=='ok' else 'no_session',
+                    'selected_region':state.get('region','amsterdam'),'reconnected':False}
 
         print(json.dumps({'app_id':'tvpn','ok':True,**result},ensure_ascii=False));return 0
     except (updater.UpdateError,OSError,ValueError) as error:
         print(json.dumps({'app_id':'tvpn','ok':False,'error':str(error)},ensure_ascii=False));return 1
+
+
+def _windows_service_state(name):
+    try:
+        import shutil as _shutil
+        ps=_shutil.which('pwsh.exe') or _shutil.which('pwsh') or _shutil.which('powershell.exe') or 'powershell.exe'
+        result=subprocess.run([ps,'-NoProfile','-NonInteractive','-Command',
+            f"(Get-Service -Name '{name}' -ErrorAction SilentlyContinue).Status"],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=15)
+        return (result.stdout.strip() or None) if result.returncode==0 else None
+    except (OSError,subprocess.SubprocessError):
+        return None
+
+
+def _windows_admin_group_member():
+    try:
+        import shutil as _shutil
+        ps=_shutil.which('pwsh.exe') or _shutil.which('pwsh') or _shutil.which('powershell.exe') or 'powershell.exe'
+        user='[Security.Principal.WindowsIdentity]::GetCurrent().Name'
+        result=subprocess.run([ps,'-NoProfile','-NonInteractive','-Command',
+            f"$m=Get-LocalGroupMember -Group 'OpenVPN Administrators' -ErrorAction SilentlyContinue; $u={user}; if($m.Name -contains $u){{'True'}}else{{'False'}}"],
+            capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=15)
+        return (result.stdout.strip().lower()=='true') if result.returncode==0 else None
+    except (OSError,subprocess.SubprocessError):
+        return None
 
 
 if __name__=='__main__':sys.exit(main())

@@ -1,34 +1,40 @@
 {
-  "method": "Linux /proc process CPU after 1s warmup, 3s samples, real PTY loop, four synthetic catalog entries; one sample per mode, background secondary random",
+  "method": "Linux /proc process CPU, 1.5s warmup, 3.0s measurement, 2 runs per mode, live 120x40 PTY, five synthetic apps; idle-paused receives Space before sample, animated leaves tthings motion active, no-motion uses the flag",
   "results": [
     {
-      "mode": [
-        "default"
+      "mode": "idle-paused",
+      "one_core_cpu_percent_samples": [
+        0.0,
+        0.0
       ],
-      "one_core_cpu_percent": 10.9,
-      "wall_seconds": 3.02,
+      "mean_one_core_cpu_percent": 0.0,
+      "wall_seconds": 3.0,
       "terminal": [
         120,
         40
       ]
     },
     {
-      "mode": [
-        "--low-power"
+      "mode": "animated",
+      "one_core_cpu_percent_samples": [
+        3.65,
+        3.65
       ],
-      "one_core_cpu_percent": 7.6,
-      "wall_seconds": 3.04,
+      "mean_one_core_cpu_percent": 3.65,
+      "wall_seconds": 3.0,
       "terminal": [
         120,
         40
       ]
     },
     {
-      "mode": [
-        "--no-motion"
+      "mode": "no-motion",
+      "one_core_cpu_percent_samples": [
+        0.0,
+        0.0
       ],
-      "one_core_cpu_percent": 2.3,
-      "wall_seconds": 3.01,
+      "mean_one_core_cpu_percent": 0.0,
+      "wall_seconds": 3.0,
       "terminal": [
         120,
         40

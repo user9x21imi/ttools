@@ -1,14 +1,14 @@
 # Установка и поддерживаемые платформы
 
-Перед первой миграцией закройте прежние окна Spotify/Telegram/VPN/tthings.
+Перед первой миграцией закройте прежние окна Spotify/SoundCloud/Telegram/VPN/tthings.
 Telegram использует прежнюю базу авторизации: два клиента не должны открывать
 её одновременно. Установка не удаляет её и не запускает клиента сама.
 
 | Платформа | Состав | Состояние |
 |---|---|---|
-| Linux x86_64 / SteamOS | Все четыре приложения + ttools | Комплектный локальный runtime Spotify рассчитан на glibc 2.43; для других систем предусмотрена установка Spotify из исходников |
-| macOS ARM64 / x86_64 | ttools, Spotify, TVPN, tthings | Preview, Telegram не поддерживается переданным пакетом; реальные native smoke/туннель не подтверждены |
-| Windows x86_64 | Опубликованы ttools, Spotify, TVPN, tthings; кандидат добавляет ttelegram | Native Telegram предварительный; ручной smoke, звук и туннель не подтверждены |
+| Linux x86_64 / SteamOS | ttools и пять приложений, включая SoundCloud | SoundCloud preview; комплектный локальный runtime Spotify рассчитан на glibc 2.43 |
+| macOS ARM64 / x86_64 | ttools, Spotify, TVPN, tthings | Preview; SoundCloud и Telegram не входят, реальные native smoke/туннель не подтверждены |
+| Windows x86_64 | ttools, Spotify, Telegram, TVPN, tthings | SoundCloud не входит; Telegram preview-кандидат, ручной smoke, звук и туннель не подтверждены |
 
 Linux Telegram: CPython 3.14, glibc >=2.28, tmux >=3.4, ffmpeg/ffprobe с
 libopus/PulseAudio, ffplay, kdialog, pactl, системный `/usr/bin/python3` с
@@ -25,6 +25,9 @@ read-only root не отключается. В Debian/Ubuntu bootstrap може�
 на Windows — официальный OpenVPN и локальную группу. Windows может потребовать
 повторного входа пользователя для применения прав.
 
+SoundCloud работает на Linux x86_64. Для демо системные аудиозависимости не нужны;
+для живого воспроизведения установите FFmpeg и SDL2 и подключите рабочий аудиовыход.
+
 Обычные окна tthings требуют Tk. Выделение областей на Linux — Qt6/QML и KWin;
 их наличие не требуется для терминального меню. Внешние 41 проекты tthings
 в комплект не входят и автоматически не устанавливаются.
@@ -32,7 +35,7 @@ read-only root не отключается. В Debian/Ubuntu bootstrap може�
 ## Локальный архив без GitHub
 
 Распакуйте ZIP своей ОС. `Install-ttools.sh` / `Install-ttools.command` /
-`Install-ttools.cmd` готовит CPython 3.14 и вызывает install-only. В опубликованном 1.1.0-preview.1 macOS/Windows устанавливают неполный комплект без Telegram. Эта ветка добавляет нативный Windows Telegram в следующий кандидат; macOS остаётся без Telegram.
+`Install-ttools.cmd` готовит CPython 3.14 и вызывает install-only. macOS устанавливает неполный комплект без Telegram и SoundCloud; Windows — без SoundCloud, а поддержка Telegram зависит от выбранного preview.
 
 Если CPython 3.14 уже готов, откройте терминал в папке `ttools`:
 
@@ -40,8 +43,8 @@ read-only root не отключается. В Debian/Ubuntu bootstrap може�
 python3 installer.py
 ```
 
-Для полной Linux-установки используйте CPython 3.14. На macOS/Windows до
-подготовки native Telegram нужен явный `--allow-partial`:
+Для полной Linux-установки используйте CPython 3.14. На macOS/Windows с
+неподдерживаемыми компонентами нужен явный `--allow-partial`:
 
 ```sh
 python3 installer.py --allow-partial
@@ -74,6 +77,33 @@ python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcu
 Этот режим не делает VPN готовым: `complete=false`. Он нужен тестам и
 подготовке пользовательских файлов. Полная установка не использует этот флаг.
 
+## Windows: диагностика и журнал установщика
+
+Извлеките ZIP полностью. Безопасная диагностика запускается так:
+
+```powershell
+powershell.exe -NoProfile -File .\ttools\scripts\Diagnose-TTools.ps1
+```
+
+Она проверяет запуск CPython 3.14, видимость команд WinGet, App Installer и
+WinGet alias. Диагностика ничего не устанавливает и не меняет; домашние пути в
+выводе маскируются.
+
+Для установки из ZIP с подробным журналом:
+
+```powershell
+& .\ttools\Install-ttools.cmd -Preview -LogPath "$env:LOCALAPPDATA\ttools-install.log"
+```
+
+Для официального PowerShell-установщика команда выглядит так:
+
+```powershell
+& .\install.ps1 -Preview -LogPath "$env:LOCALAPPDATA\ttools-install.log"
+```
+
+Журнал дополняется при повторном запуске. Перед отправкой журнала проверьте
+строки с путями установки.
+
 ## Данные и обновления
 
 Префикс по умолчанию:
@@ -85,9 +115,19 @@ python3 installer.py --prefix '/tmp/Тест ttools' --defer-system --no-shortcu
 Новая версия получает новый каталог; работающая версия не перезаписывается.
 Пользовательские данные приложений хранятся вне каталога релиза.
 
-Отключить автоматическую проверку на один запуск: `TTOOLS_AUTOUPDATE=0 ttools`
-(на Unix). Ручная проверка/установка: `ttools --update`. При запуске из исходников
-без установленного suite эти флаги управления не предоставляются.
+Лаунчер проверяет канал релизов при запуске: не чаще одного раза в шесть часов,
+а после сетевой ошибки повторяет попытку через 15 минут. На macOS он показывает
+доступную версию и спрашивает, устанавливать ли её; пустой ответ пропускает
+обновление до следующей проверки. На остальных платформах включено автоматическое
+обновление. Если сеть недоступна,
+установленная версия всё равно запускается. Проверка читает публичную ленту
+релизов GitHub и скачивает манифест и архив по HTTPS; содержимое сверяется по
+SHA-256 до установки. Релизы хранятся отдельно от исходников и страницы README.
+
+Отключить проверку и предложение обновления на один запуск: `TTOOLS_AUTOUPDATE=0 ttools`
+(на Unix). Принудительно проверить и установить обновление: `ttools --update`.
+При запуске из исходников без установленного suite эти флаги управления
+не предоставляются.
 
 Удаление пользовательского префикса и ярлыков не удаляет авторизацию приложений.
 Системный VPN-backend и sudoers следует удалять штатными средствами TVPN:

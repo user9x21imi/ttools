@@ -1,0 +1,55 @@
+{
+  "main_80x24": {
+    "frames": 120,
+    "p50_ms": 1.069,
+    "p95_ms": 1.111,
+    "max_ms": 2.844
+  },
+  "player_80x24": {
+    "frames": 120,
+    "p50_ms": 0.947,
+    "p95_ms": 0.982,
+    "max_ms": 2.724
+  },
+  "main_120x40": {
+    "frames": 120,
+    "p50_ms": 2.701,
+    "p95_ms": 4.052,
+    "max_ms": 5.046
+  },
+  "player_120x40": {
+    "frames": 120,
+    "p50_ms": 3.251,
+    "p95_ms": 5.022,
+    "max_ms": 13.341
+  },
+  "cover_transition_120x40": {
+    "frames": 120,
+    "p50_ms": 7.452,
+    "p95_ms": 9.353,
+    "max_ms": 17.773
+  },
+  "panel_transition_120x40": {
+    "frames": 120,
+    "p50_ms": 4.059,
+    "p95_ms": 5.862,
+    "max_ms": 16.971
+  },
+  "main_160x50": {
+    "frames": 120,
+    "p50_ms": 5.42,
+    "p95_ms": 7.292,
+    "max_ms": 17.11
+  },
+  "player_160x50": {
+    "frames": 120,
+    "p50_ms": 5.75,
+    "p95_ms": 7.568,
+    "max_ms": 18.363
+  },
+  "measurement": {
+    "method": "FakeScreen render loop, no Spotify account, network, audio capture or terminal I/O",
+    "python": "3.14.6",
+    "frames_per_layout": 120
+  }
+}

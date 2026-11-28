@@ -23,6 +23,12 @@ def main(argv=None):
         import platform
         if sys.platform!='linux' or platform.machine()!='x86_64':raise updater.UpdateError('Linux x86_64 only')
         if os.geteuid()==0:raise updater.UpdateError('Run installer as the ordinary user, not root')
+        try:import curses
+        except ImportError as error:raise updater.UpdateError('Python curses is required') from error
+        import shutil as which_tools
+        required=['bash','curl','ip','flock']+([] if a.defer_system else ['sudo','visudo'])
+        missing=[name for name in required if not which_tools.which(name)]
+        if missing:raise updater.UpdateError('Missing Linux prerequisites: '+', '.join(missing))
         dest=a.prefix.expanduser().resolve()
         if dest==ROOT:raise updater.UpdateError('Source and destination must differ')
         dest.mkdir(parents=True,exist_ok=True)
